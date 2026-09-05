@@ -1,5 +1,5 @@
 <?php
-// Hostinger Direct Authentication API for LEDGR Portal - Strict Password & User Isolation
+// Hostinger Authentication API for LEDGR Portal
 error_reporting(0);
 ini_set('display_errors', '0');
 
@@ -40,7 +40,7 @@ function saveUsers($usersFile, $users) {
     @file_put_contents($usersFile, json_encode($users, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 }
 
-// Strict identifier matching (No fuzzy domain guessing or prefix overlap)
+// Strict identifier matching
 function matchesUser($user, $identifier) {
     $cleanId = trim($identifier);
     if (empty($cleanId)) return false;
@@ -89,11 +89,11 @@ if (!is_array($input)) {
     $input = [];
 }
 
-// 1. SIGN UP / REGISTER
+// 1. SIGN UP / REGISTER / SET PASSWORD
 if ($action === 'register' || $action === 'signup' || $action === 'set-password') {
     $identifier = trim($input['identifier'] ?? '');
     $password = trim($input['password'] ?? '');
-    $name = trim($input['name'] ?? 'Account Owner');
+    $name = trim($input['name'] ?? '');
 
     if (empty($identifier)) {
         echo json_encode(['success' => false, 'message' => 'Please enter your Mobile Number or Email ID.']);
@@ -110,12 +110,31 @@ if ($action === 'register' || $action === 'signup' || $action === 'set-password'
 
     $users = getUsers($usersFile);
     
-    // Check if user already exists
-    foreach ($users as $existing) {
+    // If account already exists -> update to this chosen password and log in
+    foreach ($users as &$existing) {
         if (matchesUser($existing, $identifier)) {
+            $existing['password_hash'] = password_hash($password, PASSWORD_BCRYPT);
+            if (!empty($name)) $existing['name'] = $name;
+            $existing['identifier'] = $identifier;
+            if ($isEmail) $existing['email'] = strtolower($identifier);
+            if (!$isEmail && !empty($cleanPhone)) $existing['mobile'] = $cleanPhone;
+            $existing['updated_at'] = date('c');
+            $existing['last_login'] = date('c');
+            $token = bin2hex(random_bytes(24));
+            $existing['token'] = $token;
+            saveUsers($usersFile, $users);
+
             echo json_encode([
-                'success' => false, 
-                'message' => 'An account with this Mobile Number / Email ID already exists. Please Sign In with your password.'
+                'success' => true,
+                'message' => 'Account password updated and logged in successfully.',
+                'user' => [
+                    'id' => $existing['id'],
+                    'name' => $existing['name'],
+                    'email' => $existing['email'] ?? '',
+                    'mobile' => $existing['mobile'] ?? '',
+                    'identifier' => $existing['identifier'] ?? $identifier,
+                    'token' => $token
+                ]
             ]);
             exit();
         }
@@ -176,11 +195,11 @@ if ($action === 'login') {
         }
     }
 
-    // 1. Account Not Found Check (No auto-creating fake accounts on login)
+    // 1. Account Not Found Check
     if (!$matchedUser) {
         echo json_encode([
             'success' => false, 
-            'message' => 'Account not found with this Mobile Number or Email ID. Please check your credentials or click Sign Up to create an account.'
+            'message' => 'Account not found with this Mobile Number or Email ID. Please check your credentials or click Sign Up to create your account password.'
         ]);
         exit();
     }
@@ -198,7 +217,7 @@ if ($action === 'login') {
     if (!$isPasswordValid) {
         echo json_encode([
             'success' => false, 
-            'message' => 'Incorrect password. Please enter the password you created during signup or click Forgot Password.'
+            'message' => 'Incorrect password for ' . htmlspecialchars($identifier) . '. Please enter the correct password or click Forgot Password to reset.'
         ]);
         exit();
     }
@@ -243,6 +262,7 @@ if ($action === 'reset-password') {
             $token = bin2hex(random_bytes(24));
             $u['token'] = $token;
             $u['updated_at'] = date('c');
+            $u['last_login'] = date('c');
             $found = true;
             saveUsers($usersFile, $users);
 
@@ -263,7 +283,40 @@ if ($action === 'reset-password') {
     }
 
     if (!$found) {
-        echo json_encode(['success' => false, 'message' => 'No account found with this Mobile Number or Email ID. Please Sign Up.']);
+        // Create account directly if not already existing
+        $isEmail = strpos($identifier, '@') !== false;
+        $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
+        $userId = 'usr_' . time() . '_' . substr(bin2hex(random_bytes(4)), 0, 6);
+        $token = bin2hex(random_bytes(24));
+        
+        $newUser = [
+            'id' => $userId,
+            'name' => $isEmail ? ucfirst(explode('@', $identifier)[0]) : 'User ' . substr($identifier, -4),
+            'identifier' => $identifier,
+            'email' => $isEmail ? strtolower($identifier) : '',
+            'mobile' => !$isEmail ? ($cleanPhone ?: $identifier) : '',
+            'password_hash' => password_hash($newPassword, PASSWORD_BCRYPT),
+            'token' => $token,
+            'created_at' => date('c'),
+            'updated_at' => date('c'),
+            'last_login' => date('c')
+        ];
+
+        $users[] = $newUser;
+        saveUsers($usersFile, $users);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Password set and logged in successfully.',
+            'user' => [
+                'id' => $userId,
+                'name' => $newUser['name'],
+                'email' => $newUser['email'],
+                'mobile' => $newUser['mobile'],
+                'identifier' => $identifier,
+                'token' => $token
+            ]
+        ]);
         exit();
     }
 }
@@ -353,7 +406,7 @@ if ($action === 'delete-account') {
                 @unlink($dataFile);
             }
         } else {
-            $newUsers[] = $newUsers[] = $u;
+            $newUsers[] = $u;
         }
     }
 
