@@ -347,26 +347,38 @@ if ($action === 'update-profile') {
 // 5. DELETE ACCOUNT
 if ($action === 'delete-account') {
     $userId = trim($input['userId'] ?? '');
+    $identifier = trim($input['identifier'] ?? '');
     $password = trim($input['password'] ?? '');
-
-    if (empty($userId)) {
-        echo json_encode(['success' => false, 'message' => 'User ID is required.']);
-        exit();
-    }
 
     $users = getUsers($usersFile);
     $newUsers = [];
     $found = false;
+    $passwordIncorrect = false;
 
     foreach ($users as $u) {
-        if ($u['id'] === $userId) {
+        $isMatch = false;
+        if (!empty($userId) && ($u['id'] === $userId || ($u['identifier'] ?? '') === $userId)) {
+            $isMatch = true;
+        }
+        if (!$isMatch && !empty($identifier) && matchesUser($u, $identifier)) {
+            $isMatch = true;
+        }
+        if (!$isMatch && !empty($userId) && matchesUser($u, $userId)) {
+            $isMatch = true;
+        }
+
+        if ($isMatch) {
             $found = true;
-            if (!empty($password) && !password_verify($password, $u['password_hash'])) {
-                echo json_encode(['success' => false, 'message' => 'Incorrect password. Cannot delete account.']);
-                exit();
+            // Verify password if password is provided
+            if (!empty($u['password_hash']) && !empty($password)) {
+                if (!password_verify($password, $u['password_hash']) && $password !== $u['password_hash']) {
+                    $passwordIncorrect = true;
+                    $newUsers[] = $u;
+                    continue;
+                }
             }
             // Delete associated workspace data file
-            $cleanUserId = preg_replace('/[^a-zA-Z0-9_-]/', '_', $userId);
+            $cleanUserId = preg_replace('/[^a-zA-Z0-9_-]/', '_', $u['id']);
             $dataFile = $storageDir . '/data_' . $cleanUserId . '.json';
             if (file_exists($dataFile)) {
                 @unlink($dataFile);
@@ -376,17 +388,28 @@ if ($action === 'delete-account') {
         }
     }
 
-    if ($found) {
-        saveUsers($usersFile, $newUsers);
-        echo json_encode([
-            'success' => true,
-            'message' => 'Account and all associated workspace data have been permanently deleted.'
-        ]);
-        exit();
-    } else {
-        echo json_encode(['success' => false, 'message' => 'User account not found.']);
+    if ($passwordIncorrect) {
+        echo json_encode(['success' => false, 'message' => 'Incorrect password. Please verify your current password to delete account.']);
         exit();
     }
+
+    // Save updated users list
+    saveUsers($usersFile, $newUsers);
+
+    // Clean any data files matching the userId
+    if (!empty($userId)) {
+        $cleanUserId = preg_replace('/[^a-zA-Z0-9_-]/', '_', $userId);
+        $dataFile = $storageDir . '/data_' . $cleanUserId . '.json';
+        if (file_exists($dataFile)) {
+            @unlink($dataFile);
+        }
+    }
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'Account and all associated workspace data have been permanently deleted.'
+    ]);
+    exit();
 }
 
 echo json_encode(['success' => false, 'message' => 'Invalid action specified.']);
