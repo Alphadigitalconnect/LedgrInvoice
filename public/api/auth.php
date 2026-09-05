@@ -1,5 +1,5 @@
 <?php
-// Hostinger Authentication & OTP Verification API for LEDGR Portal
+// Hostinger Direct Authentication API for LEDGR Portal
 error_reporting(0);
 ini_set('display_errors', '0');
 
@@ -63,7 +63,7 @@ function matchesUser($user, $identifier) {
         }
     }
 
-    // Prefix/Domain-agnostic match (e.g. admin@scandassociates matching admin@scandassociates.com)
+    // Prefix/Domain-agnostic match
     if (strpos($idLow, '@') !== false && !empty($userEmailLow)) {
         $partA = explode('@', $idLow)[0];
         $partB = explode('@', $userEmailLow)[0];
@@ -75,46 +75,17 @@ function matchesUser($user, $identifier) {
     return false;
 }
 
-function sendOTPEmail($toEmail, $otp, $name) {
-    $fromEmail = 'noreply@lavenderblush-wren-342345.hostingersite.com';
-    $subject = "Your LEDGR Verification Code: " . $otp;
-    $headers = "MIME-Version: 1.0\r\n";
-    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $headers .= "From: LEDGR Security <" . $fromEmail . ">\r\n";
-    $headers .= "Reply-To: " . $fromEmail . "\r\n";
-    $headers .= "Return-Path: " . $fromEmail . "\r\n";
-    $headers .= "X-Mailer: PHP/" . phpversion();
-
-    $html = '<div style="max-width:520px;margin:0 auto;font-family:\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;padding:28px;border:1px solid #e2e8f0;border-radius:16px;background:#ffffff;box-shadow:0 4px 12px rgba(0,0,0,0.05);">';
-    $html .= '<div style="text-align:center;padding-bottom:20px;border-bottom:1px solid #f1f5f9;">';
-    $html .= '<h2 style="color:#0f172a;margin:0;font-size:22px;font-weight:800;letter-spacing:-0.5px;">LEDGR Portal</h2>';
-    $html .= '<p style="color:#64748b;font-size:12px;margin:4px 0 0;">Multi-Entity Invoicing & Entity Portal</p>';
-    $html .= '</div>';
-    $html .= '<div style="padding:28px 0;text-align:center;">';
-    $html .= '<p style="color:#334155;font-size:15px;margin-bottom:16px;">Hello <strong>' . htmlspecialchars($name ?: 'User') . '</strong>,</p>';
-    $html .= '<p style="color:#475569;font-size:13px;line-height:1.6;margin:0 0 20px;">Your 6-digit verification code (OTP) to securely log in to your LEDGR workspace is:</p>';
-    $html .= '<div style="margin:20px auto;display:inline-block;padding:16px 36px;background:#f8fafc;border:2px dashed #0f172a;border-radius:12px;font-size:36px;font-weight:bold;letter-spacing:10px;color:#0f172a;font-family:Consolas,monospace;">' . $otp . '</div>';
-    $html .= '<p style="color:#94a3b8;font-size:12px;margin-top:20px;">This OTP is valid for <strong>10 minutes</strong>. Please do not share this code with anyone.</p>';
-    $html .= '</div>';
-    $html .= '<div style="border-top:1px solid #f1f5f9;padding-top:16px;text-align:center;color:#94a3b8;font-size:11px;">';
-    $html .= 'Sent securely by LEDGR Portal from <strong>noreply@lavenderblush-wren-342345.hostingersite.com</strong> • Hosted on Hostinger';
-    $html .= '</div>';
-    $html .= '</div>';
-
-    return @mail($toEmail, $subject, $html, $headers, "-f" . $fromEmail);
-}
-
 $action = isset($_GET['action']) ? trim($_GET['action']) : '';
 $input = json_decode(file_get_contents('php://input'), true);
 if (!is_array($input)) {
     $input = [];
 }
 
-// 1. INITIATE LOGIN / SIGN UP & SEND OTP
-if ($action === 'login' || $action === 'register' || $action === 'send-otp') {
+// 1. SIGN UP / REGISTER
+if ($action === 'register' || $action === 'signup' || $action === 'set-password') {
     $identifier = trim($input['identifier'] ?? '');
     $password = trim($input['password'] ?? '');
-    $name = trim($input['name'] ?? '');
+    $name = trim($input['name'] ?? 'Account Owner');
 
     if (empty($identifier)) {
         echo json_encode(['success' => false, 'message' => 'Please enter your Mobile Number or Email ID.']);
@@ -130,94 +101,78 @@ if ($action === 'login' || $action === 'register' || $action === 'send-otp') {
     $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
 
     $users = getUsers($usersFile);
-    $matchedUser = null;
+    
+    // Check if user already exists -> update credentials and login
+    foreach ($users as &$existing) {
+        if (matchesUser($existing, $identifier)) {
+            $existing['password_hash'] = password_hash($password, PASSWORD_BCRYPT);
+            if (!empty($name)) $existing['name'] = $name;
+            $existing['identifier'] = $identifier;
+            if ($isEmail) $existing['email'] = strtolower($identifier);
+            if (!$isEmail && !empty($cleanPhone)) $existing['mobile'] = $cleanPhone;
+            $existing['updated_at'] = date('c');
+            $token = bin2hex(random_bytes(24));
+            $existing['token'] = $token;
+            saveUsers($usersFile, $users);
 
-    foreach ($users as &$u) {
-        if (matchesUser($u, $identifier)) {
-            $matchedUser = &$u;
-            break;
-        }
-    }
-
-    // Generate 6-digit OTP and 10-minute expiry
-    $otp = str_pad((string)rand(100000, 999999), 6, '0', STR_PAD_LEFT);
-    $otpExpiry = time() + 600;
-
-    if (!$matchedUser) {
-        // Auto-provision user record
-        $userId = 'usr_' . time() . '_' . substr(bin2hex(random_bytes(4)), 0, 6);
-        $defaultName = !empty($name) ? $name : ($isEmail ? ucfirst(explode('@', $identifier)[0]) : 'User ' . substr($identifier, -4));
-
-        $newUser = [
-            'id' => $userId,
-            'name' => $defaultName,
-            'identifier' => $identifier,
-            'email' => $isEmail ? strtolower($identifier) : '',
-            'mobile' => !$isEmail ? ($cleanPhone ?: $identifier) : '',
-            'password_hash' => password_hash($password, PASSWORD_BCRYPT),
-            'token' => '',
-            'otp_code' => $otp,
-            'otp_expiry' => $otpExpiry,
-            'created_at' => date('c'),
-            'updated_at' => date('c')
-        ];
-
-        $users[] = $newUser;
-        saveUsers($usersFile, $users);
-        $matchedUser = $newUser;
-    } else {
-        // Verify password
-        if (!password_verify($password, $matchedUser['password_hash']) && $password !== $matchedUser['password_hash']) {
-            echo json_encode(['success' => false, 'message' => 'Incorrect password. Please verify your password or use Forgot Password.']);
+            echo json_encode([
+                'success' => true,
+                'message' => 'Account logged in successfully.',
+                'user' => [
+                    'id' => $existing['id'],
+                    'name' => $existing['name'],
+                    'email' => $existing['email'] ?? '',
+                    'mobile' => $existing['mobile'] ?? '',
+                    'identifier' => $existing['identifier'] ?? $identifier,
+                    'token' => $token
+                ]
+            ]);
             exit();
         }
-
-        // Update OTP
-        $matchedUser['otp_code'] = $otp;
-        $matchedUser['otp_expiry'] = $otpExpiry;
-        if (!empty($name)) $matchedUser['name'] = $name;
-        $matchedUser['updated_at'] = date('c');
-        saveUsers($usersFile, $users);
     }
 
-    // Deliver OTP
-    $deliveryType = $isEmail ? 'email' : 'mobile';
-    $targetMask = $isEmail ? $identifier : (strlen($cleanPhone) >= 10 ? '+91 ' . $cleanPhone : $identifier);
+    // New user creation
+    $userId = 'usr_' . time() . '_' . substr(bin2hex(random_bytes(4)), 0, 6);
+    $token = bin2hex(random_bytes(24));
+    
+    $newUser = [
+        'id' => $userId,
+        'name' => $name,
+        'identifier' => $identifier,
+        'email' => $isEmail ? strtolower($identifier) : '',
+        'mobile' => !$isEmail ? ($cleanPhone ?: $identifier) : '',
+        'password_hash' => password_hash($password, PASSWORD_BCRYPT),
+        'token' => $token,
+        'created_at' => date('c'),
+        'updated_at' => date('c'),
+        'last_login' => date('c')
+    ];
 
-    $whatsappUrl = '';
-    if ($isEmail) {
-        sendOTPEmail($identifier, $otp, $matchedUser['name'] ?? '');
-    } else if (!empty($cleanPhone)) {
-        // WhatsApp message dispatch URL
-        $waMsg = "Your LEDGR Portal Login Verification Code (OTP) is: *" . $otp . "*. This code is valid for 10 minutes. Please do not share it with anyone.";
-        $whatsappUrl = "https://api.whatsapp.com/send?phone=91" . $cleanPhone . "&text=" . urlencode($waMsg);
-    }
+    $users[] = $newUser;
+    saveUsers($usersFile, $users);
 
     echo json_encode([
         'success' => true,
-        'requires_otp' => true,
-        'delivery_type' => $deliveryType,
-        'target' => $targetMask,
-        'whatsapp_url' => $whatsappUrl,
-        'userId' => $matchedUser['id'],
-        'message' => 'Verification code (OTP) sent to your ' . ($isEmail ? 'email ID.' : 'mobile number / WhatsApp.')
+        'message' => 'Account created successfully.',
+        'user' => [
+            'id' => $userId,
+            'name' => $name,
+            'email' => $newUser['email'],
+            'mobile' => $newUser['mobile'],
+            'identifier' => $identifier,
+            'token' => $token
+        ]
     ]);
     exit();
 }
 
-// 2. VERIFY OTP & COMPLETE LOGIN
-if ($action === 'verify-otp') {
+// 2. SIGN IN / DIRECT LOGIN
+if ($action === 'login') {
     $identifier = trim($input['identifier'] ?? '');
-    $otp = trim($input['otp'] ?? '');
-    $userId = trim($input['userId'] ?? '');
+    $password = trim($input['password'] ?? '');
 
-    if (empty($identifier) && empty($userId)) {
-        echo json_encode(['success' => false, 'message' => 'Identifier or User ID is required.']);
-        exit();
-    }
-
-    if (empty($otp)) {
-        echo json_encode(['success' => false, 'message' => 'Please enter the 6-digit verification code (OTP).']);
+    if (empty($identifier) || empty($password)) {
+        echo json_encode(['success' => false, 'message' => 'Please enter your Mobile / Email and password.']);
         exit();
     }
 
@@ -225,10 +180,6 @@ if ($action === 'verify-otp') {
     $matchedUser = null;
 
     foreach ($users as &$u) {
-        if (!empty($userId) && $u['id'] === $userId) {
-            $matchedUser = &$u;
-            break;
-        }
         if (matchesUser($u, $identifier)) {
             $matchedUser = &$u;
             break;
@@ -236,37 +187,58 @@ if ($action === 'verify-otp') {
     }
 
     if (!$matchedUser) {
-        echo json_encode(['success' => false, 'message' => 'User account not found.']);
+        // Auto-create account seamlessly on first sign-in
+        $isEmail = strpos($identifier, '@') !== false;
+        $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
+        $userId = 'usr_' . time() . '_' . substr(bin2hex(random_bytes(4)), 0, 6);
+        $token = bin2hex(random_bytes(24));
+        
+        $defaultName = $isEmail ? ucfirst(explode('@', $identifier)[0]) : 'User ' . substr($identifier, -4);
+        
+        $newUser = [
+            'id' => $userId,
+            'name' => $defaultName,
+            'identifier' => $identifier,
+            'email' => $isEmail ? strtolower($identifier) : '',
+            'mobile' => !$isEmail ? ($cleanPhone ?: $identifier) : '',
+            'password_hash' => password_hash($password, PASSWORD_BCRYPT),
+            'token' => $token,
+            'created_at' => date('c'),
+            'updated_at' => date('c'),
+            'last_login' => date('c')
+        ];
+
+        $users[] = $newUser;
+        saveUsers($usersFile, $users);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Account created and logged in successfully.',
+            'user' => [
+                'id' => $userId,
+                'name' => $newUser['name'],
+                'email' => $newUser['email'],
+                'mobile' => $newUser['mobile'],
+                'identifier' => $identifier,
+                'token' => $token
+            ]
+        ]);
         exit();
     }
 
-    // Verify OTP code
-    $storedOtp = trim((string)($matchedUser['otp_code'] ?? ''));
-    $otpExpiry = intval($matchedUser['otp_expiry'] ?? 0);
-
-    $isOtpValid = false;
-    if (!empty($storedOtp) && ($otp === $storedOtp || $otp === '123456')) {
-        if (time() <= $otpExpiry || $otpExpiry === 0 || $otp === '123456') {
-            $isOtpValid = true;
-        }
-    }
-
-    if (!$isOtpValid) {
-        echo json_encode(['success' => false, 'message' => 'Invalid or expired OTP. Please check the code or click Resend OTP.']);
+    if (!password_verify($password, $matchedUser['password_hash']) && $password !== $matchedUser['password_hash']) {
+        echo json_encode(['success' => false, 'message' => 'Incorrect password. Please verify your password or click Forgot Password.']);
         exit();
     }
 
-    // Authentication Success: Generate auth token and clear OTP
     $token = bin2hex(random_bytes(24));
     $matchedUser['token'] = $token;
-    $matchedUser['otp_code'] = '';
-    $matchedUser['otp_expiry'] = 0;
     $matchedUser['last_login'] = date('c');
     saveUsers($usersFile, $users);
 
     echo json_encode([
         'success' => true,
-        'message' => 'OTP verified successfully. Login successful.',
+        'message' => 'Login successful.',
         'user' => [
             'id' => $matchedUser['id'],
             'name' => $matchedUser['name'],
@@ -279,62 +251,7 @@ if ($action === 'verify-otp') {
     exit();
 }
 
-// 3. RESEND OTP
-if ($action === 'resend-otp') {
-    $identifier = trim($input['identifier'] ?? '');
-    $userId = trim($input['userId'] ?? '');
-
-    if (empty($identifier) && empty($userId)) {
-        echo json_encode(['success' => false, 'message' => 'Mobile number or Email ID is required.']);
-        exit();
-    }
-
-    $users = getUsers($usersFile);
-    $matchedUser = null;
-
-    foreach ($users as &$u) {
-        if (!empty($userId) && $u['id'] === $userId) {
-            $matchedUser = &$u;
-            break;
-        }
-        if (matchesUser($u, $identifier)) {
-            $matchedUser = &$u;
-            break;
-        }
-    }
-
-    if (!$matchedUser) {
-        echo json_encode(['success' => false, 'message' => 'User account not found.']);
-        exit();
-    }
-
-    $otp = str_pad((string)rand(100000, 999999), 6, '0', STR_PAD_LEFT);
-    $matchedUser['otp_code'] = $otp;
-    $matchedUser['otp_expiry'] = time() + 600;
-    $matchedUser['updated_at'] = date('c');
-    saveUsers($usersFile, $users);
-
-    $isEmail = strpos($matchedUser['identifier'], '@') !== false || !empty($matchedUser['email']);
-    $cleanPhone = preg_replace('/[^0-9]/', '', $matchedUser['mobile'] ?: $matchedUser['identifier']);
-    $whatsappUrl = '';
-
-    if ($isEmail) {
-        $emailAddr = $matchedUser['email'] ?: $matchedUser['identifier'];
-        sendOTPEmail($emailAddr, $otp, $matchedUser['name'] ?? '');
-    } else if (!empty($cleanPhone)) {
-        $waMsg = "Your new LEDGR Portal Login Verification Code (OTP) is: *" . $otp . "*. This code is valid for 10 minutes. Please do not share it with anyone.";
-        $whatsappUrl = "https://api.whatsapp.com/send?phone=91" . $cleanPhone . "&text=" . urlencode($waMsg);
-    }
-
-    echo json_encode([
-        'success' => true,
-        'whatsapp_url' => $whatsappUrl,
-        'message' => 'A new 6-digit OTP has been sent to your ' . ($isEmail ? 'email ID.' : 'mobile number / WhatsApp.')
-    ]);
-    exit();
-}
-
-// 4. RESET PASSWORD
+// 3. RESET PASSWORD
 if ($action === 'reset-password') {
     $identifier = trim($input['identifier'] ?? '');
     $newPassword = trim($input['new_password'] ?? '');
@@ -378,7 +295,7 @@ if ($action === 'reset-password') {
     }
 }
 
-// 5. UPDATE PROFILE
+// 4. UPDATE PROFILE
 if ($action === 'update-profile') {
     $userId = trim($input['userId'] ?? '');
     $name = trim($input['name'] ?? '');
@@ -428,7 +345,7 @@ if ($action === 'update-profile') {
     }
 }
 
-// 6. DELETE ACCOUNT
+// 5. DELETE ACCOUNT
 if ($action === 'delete-account') {
     $userId = trim($input['userId'] ?? '');
     $identifier = trim($input['identifier'] ?? '');
