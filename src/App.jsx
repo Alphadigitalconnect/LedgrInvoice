@@ -538,6 +538,7 @@ export default function App() {
         onImportSuccess={handleImportInvoicesSuccess}
         entities={entities}
         clients={clients}
+        existingInvoices={invoices}
         activeEntityId={activeEntityFilter}
         onNavigateToEntities={() => {
           setIsImportInvoicesOpen(false);

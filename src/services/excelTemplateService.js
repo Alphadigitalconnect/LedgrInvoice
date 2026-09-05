@@ -2,16 +2,17 @@ import ExcelJS from 'exceljs';
 import { GST_STATES, GST_RATES } from '../data/constants';
 
 /**
- * Generate and download the Clean Invoices Excel Template
- * - NO dummy sample data rows
+ * Generate and download the Invoices Excel Template
+ * - Auto-Flow for Invoice Number (e.g. INV/2026/001)
+ * - Automatic Due Date calculation: Invoice Date + 45 days
+ * - Dropdown for Existing Clients (if added in the system)
  * - Dropdown for Issuing Entities (from created entity profiles)
  * - Dropdown for States (all 36 States/UTs)
  * - Dropdown for GST Tax Rates (0%, 5%, 12%, 18%, 28%)
  * - Dropdown for Status (PAID, PENDING, DRAFT)
  * - Automatic Excel formulas for GST Amount and Total Invoice Amount
- * - GSTIN validation hint & formatting
  */
-export async function downloadInvoicesTemplate(entities = []) {
+export async function downloadInvoicesTemplate(entities = [], clients = []) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'LEDGR Multi-Entity Invoicing Portal';
   workbook.created = new Date();
@@ -22,25 +23,39 @@ export async function downloadInvoicesTemplate(entities = []) {
     { header: 'Issuing Entities', key: 'entities', width: 30 },
     { header: 'Indian States', key: 'states', width: 30 },
     { header: 'GST Rates %', key: 'gstRates', width: 15 },
-    { header: 'Invoice Status', key: 'status', width: 18 }
+    { header: 'Invoice Status', key: 'status', width: 18 },
+    { header: 'Existing Clients', key: 'clients', width: 32 }
   ];
 
-  // Populate Entities
+  // Populate Reference Lists
   const entityNames = entities.length > 0 
-    ? entities.map(e => e.tradeName || e.name) 
+    ? entities.map(e => (e.tradeName || e.name || '').trim()).filter(Boolean)
     : ['SC & Associates'];
   
   const stateNames = GST_STATES.map(s => s.name);
   const gstRateValues = [0, 5, 12, 18, 28];
   const statusValues = ['PAID', 'PENDING', 'DRAFT'];
+  
+  // Clean client names
+  const clientNames = clients.length > 0
+    ? Array.from(new Set(clients.map(c => (c.name || c.businessName || '').trim()).filter(Boolean)))
+    : [];
 
-  const maxRows = Math.max(entityNames.length, stateNames.length, gstRateValues.length, statusValues.length);
+  const maxRows = Math.max(
+    entityNames.length, 
+    stateNames.length, 
+    gstRateValues.length, 
+    statusValues.length,
+    clientNames.length
+  );
+
   for (let i = 0; i < maxRows; i++) {
     refSheet.addRow({
       entities: entityNames[i] || '',
       states: stateNames[i] || '',
       gstRates: gstRateValues[i] !== undefined ? gstRateValues[i] : '',
-      status: statusValues[i] || ''
+      status: statusValues[i] || '',
+      clients: clientNames[i] || ''
     });
   }
 
@@ -58,11 +73,11 @@ export async function downloadInvoicesTemplate(entities = []) {
   });
 
   ws.columns = [
-    { header: 'Invoice Number', key: 'invoiceNumber', width: 20 },
+    { header: 'Invoice Number', key: 'invoiceNumber', width: 22 },
     { header: 'Invoice Date (YYYY-MM-DD)', key: 'invoiceDate', width: 24 },
-    { header: 'Due Date (YYYY-MM-DD)', key: 'dueDate', width: 22 },
+    { header: 'Due Date (YYYY-MM-DD)', key: 'dueDate', width: 24 },
     { header: 'Issuing Entity Name *', key: 'entityName', width: 30 },
-    { header: 'Client Name *', key: 'clientName', width: 30 },
+    { header: 'Client Name *', key: 'clientName', width: 32 },
     { header: 'Client GSTIN', key: 'clientGstin', width: 22 },
     { header: 'Client State / Place of Supply *', key: 'clientState', width: 30 },
     { header: 'Billing Address', key: 'address', width: 32 },
@@ -93,17 +108,44 @@ export async function downloadInvoicesTemplate(entities = []) {
   // Setup 100 blank rows with Data Validations & Excel Formulas
   const totalTemplateRows = 100;
   for (let r = 2; r <= totalTemplateRows + 1; r++) {
-    // 1. Issuing Entity Name Dropdown (Column D)
+    // 1. Invoice Number Auto-Flow Formula (Column A)
+    // Formula: IF(D{r}<>"","INV/"&TEXT(IF(B{r}<>"",B{r},TODAY()),"YYYY")&"/"&TEXT(ROW()-1,"000"),"")
+    ws.getCell(`A${r}`).value = {
+      formula: `IF(D${r}<>"","INV/"&TEXT(IF(B${r}<>"",B${r},TODAY()),"YYYY")&"/"&TEXT(ROW()-1,"000"),"")`
+    };
+
+    // 2. Automatic Due Date: 45 Days from Invoice Date (Column C)
+    // Formula: IF(B{r}<>"", B{r}+45, "")
+    ws.getCell(`C${r}`).value = {
+      formula: `IF(B${r}<>"", B${r}+45, "")`
+    };
+    ws.getCell(`C${r}`).numFmt = 'YYYY-MM-DD';
+    ws.getCell(`B${r}`).numFmt = 'YYYY-MM-DD';
+
+    // 3. Issuing Entity Name Dropdown (Column D)
     ws.getCell(`D${r}`).dataValidation = {
       type: 'list',
       allowBlank: true,
       formulae: [`'Dropdown_Lists'!$A$2:$A$${entityNames.length + 1}`],
       showErrorMessage: true,
       errorTitle: 'Invalid Entity',
-      error: 'Please select an Entity registered in your Entity Profiles.'
+      error: 'Please select an Issuing Entity registered in your Entity Profiles.'
     };
 
-    // 2. Client State Dropdown (Column G)
+    // 4. Client Name Dropdown (Column E) - If clients exist in the system
+    if (clientNames.length > 0) {
+      ws.getCell(`E${r}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`'Dropdown_Lists'!$E$2:$E$${clientNames.length + 1}`],
+        showErrorMessage: false, // allow dropdown pick OR custom entry
+        showInputMessage: true,
+        promptTitle: 'Client Selection',
+        prompt: 'Select an existing registered client from the dropdown or type a new client name.'
+      };
+    }
+
+    // 5. Client State Dropdown (Column G)
     ws.getCell(`G${r}`).dataValidation = {
       type: 'list',
       allowBlank: true,
@@ -113,7 +155,7 @@ export async function downloadInvoicesTemplate(entities = []) {
       error: 'Please select a valid Indian State or Union Territory.'
     };
 
-    // 3. GST Rate % Dropdown (Column O)
+    // 6. GST Rate % Dropdown (Column O)
     ws.getCell(`O${r}`).dataValidation = {
       type: 'list',
       allowBlank: true,
@@ -123,21 +165,21 @@ export async function downloadInvoicesTemplate(entities = []) {
       error: 'Please select a standard GST Rate (0, 5, 12, 18, 28).'
     };
 
-    // 4. Automatic GST Amount Calculation Formula (Column P)
+    // 7. Automatic GST Amount Calculation Formula (Column P)
     // Formula: IF(Taxable > 0, ROUND(Taxable * (Rate / 100), 2), "")
     ws.getCell(`P${r}`).value = {
       formula: `IF(N${r}>0, ROUND(N${r}*(IF(O${r}="",18,O${r})/100), 2), "")`
     };
     ws.getCell(`P${r}`).numFmt = '₹#,##0.00';
 
-    // 5. Automatic Total Amount Calculation Formula (Column Q)
+    // 8. Automatic Total Amount Calculation Formula (Column Q)
     // Formula: IF(Taxable > 0, ROUND(Taxable + GST_Amount, 2), "")
     ws.getCell(`Q${r}`).value = {
       formula: `IF(N${r}>0, ROUND(N${r}+P${r}, 2), "")`
     };
     ws.getCell(`Q${r}`).numFmt = '₹#,##0.00';
 
-    // 6. Status Dropdown (Column R)
+    // 9. Status Dropdown (Column R)
     ws.getCell(`R${r}`).dataValidation = {
       type: 'list',
       allowBlank: true,
@@ -147,9 +189,7 @@ export async function downloadInvoicesTemplate(entities = []) {
       error: 'Please select PAID, PENDING, or DRAFT.'
     };
 
-    // Default formatting
-    ws.getCell(`B${r}`).numFmt = 'YYYY-MM-DD';
-    ws.getCell(`C${r}`).numFmt = 'YYYY-MM-DD';
+    // Number formats
     ws.getCell(`N${r}`).numFmt = '₹#,##0.00';
     ws.getCell(`S${r}`).numFmt = '₹#,##0.00';
   }
@@ -167,10 +207,8 @@ export async function downloadInvoicesTemplate(entities = []) {
 
 /**
  * Generate and download the Clean Clients Excel Template
- * - NO dummy sample data rows
  * - Dropdown for States (all 36 States/UTs)
  * - Complete columns including Address, City, State, PIN Code, GSTIN, PAN
- * - GSTIN validation format hints
  */
 export async function downloadClientsTemplate() {
   const workbook = new ExcelJS.Workbook();
