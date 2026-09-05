@@ -1,5 +1,5 @@
 <?php
-// Hostinger Direct Authentication API for LEDGR Portal
+// Hostinger Direct Authentication API for LEDGR Portal - Strict Password & User Isolation
 error_reporting(0);
 ini_set('display_errors', '0');
 
@@ -40,36 +40,44 @@ function saveUsers($usersFile, $users) {
     @file_put_contents($usersFile, json_encode($users, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 }
 
+// Strict identifier matching (No fuzzy domain guessing or prefix overlap)
 function matchesUser($user, $identifier) {
-    $idLow = strtolower(trim($identifier));
-    if (empty($idLow)) return false;
+    $cleanId = trim($identifier);
+    if (empty($cleanId)) return false;
 
-    $userEmailLow = strtolower(trim($user['email'] ?? ''));
+    // 1. Email matching
+    if (strpos($cleanId, '@') !== false) {
+        $idLow = strtolower($cleanId);
+        $userEmailLow = strtolower(trim($user['email'] ?? ''));
+        $userStoredId = strtolower(trim($user['identifier'] ?? ''));
+        if (!empty($userEmailLow) && $userEmailLow === $idLow) return true;
+        if (!empty($userStoredId) && $userStoredId === $idLow) return true;
+        return false;
+    }
+
+    // 2. Mobile number matching
+    $cleanPhone = preg_replace('/[^0-9]/', '', $cleanId);
     $userMobile = preg_replace('/[^0-9]/', '', $user['mobile'] ?? '');
-    $userRawMobile = strtolower(trim($user['mobile'] ?? ''));
-    $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
-    $storedIdentifier = strtolower(trim($user['identifier'] ?? ''));
-    $storedName = strtolower(trim($user['name'] ?? ''));
+    $userStoredPhone = preg_replace('/[^0-9]/', '', $user['identifier'] ?? '');
 
-    // Exact matches
-    if (!empty($userEmailLow) && $userEmailLow === $idLow) return true;
-    if (!empty($storedIdentifier) && $storedIdentifier === $idLow) return true;
-    if (!empty($userRawMobile) && $userRawMobile === $idLow) return true;
-
-    // Phone matches
-    if (!empty($cleanPhone) && strlen($cleanPhone) >= 6 && !empty($userMobile)) {
-        if ($userMobile === $cleanPhone || str_ends_with($userMobile, $cleanPhone) || str_ends_with($cleanPhone, $userMobile)) {
+    if (!empty($cleanPhone) && strlen($cleanPhone) >= 10) {
+        $cleanPhone10 = substr($cleanPhone, -10);
+        if (!empty($userMobile) && strlen($userMobile) >= 10 && substr($userMobile, -10) === $cleanPhone10) {
+            return true;
+        }
+        if (!empty($userStoredPhone) && strlen($userStoredPhone) >= 10 && substr($userStoredPhone, -10) === $cleanPhone10) {
+            return true;
+        }
+    } elseif (!empty($cleanPhone)) {
+        if ($userMobile === $cleanPhone || $userStoredPhone === $cleanPhone) {
             return true;
         }
     }
 
-    // Prefix/Domain-agnostic match
-    if (strpos($idLow, '@') !== false && !empty($userEmailLow)) {
-        $partA = explode('@', $idLow)[0];
-        $partB = explode('@', $userEmailLow)[0];
-        if ($partA === $partB && (str_starts_with($userEmailLow, $idLow) || str_starts_with($idLow, $userEmailLow))) {
-            return true;
-        }
+    // Exact identifier fallback
+    $rawStored = strtolower(trim($user['identifier'] ?? ''));
+    if (!empty($rawStored) && $rawStored === strtolower($cleanId)) {
+        return true;
     }
 
     return false;
@@ -102,42 +110,24 @@ if ($action === 'register' || $action === 'signup' || $action === 'set-password'
 
     $users = getUsers($usersFile);
     
-    // Check if user already exists -> update credentials and login
-    foreach ($users as &$existing) {
+    // Check if user already exists
+    foreach ($users as $existing) {
         if (matchesUser($existing, $identifier)) {
-            $existing['password_hash'] = password_hash($password, PASSWORD_BCRYPT);
-            if (!empty($name)) $existing['name'] = $name;
-            $existing['identifier'] = $identifier;
-            if ($isEmail) $existing['email'] = strtolower($identifier);
-            if (!$isEmail && !empty($cleanPhone)) $existing['mobile'] = $cleanPhone;
-            $existing['updated_at'] = date('c');
-            $token = bin2hex(random_bytes(24));
-            $existing['token'] = $token;
-            saveUsers($usersFile, $users);
-
             echo json_encode([
-                'success' => true,
-                'message' => 'Account logged in successfully.',
-                'user' => [
-                    'id' => $existing['id'],
-                    'name' => $existing['name'],
-                    'email' => $existing['email'] ?? '',
-                    'mobile' => $existing['mobile'] ?? '',
-                    'identifier' => $existing['identifier'] ?? $identifier,
-                    'token' => $token
-                ]
+                'success' => false, 
+                'message' => 'An account with this Mobile Number / Email ID already exists. Please Sign In with your password.'
             ]);
             exit();
         }
     }
 
-    // New user creation
+    // New unique user creation with hashed password
     $userId = 'usr_' . time() . '_' . substr(bin2hex(random_bytes(4)), 0, 6);
     $token = bin2hex(random_bytes(24));
     
     $newUser = [
         'id' => $userId,
-        'name' => $name,
+        'name' => !empty($name) ? $name : ($isEmail ? ucfirst(explode('@', $identifier)[0]) : 'User ' . substr($identifier, -4)),
         'identifier' => $identifier,
         'email' => $isEmail ? strtolower($identifier) : '',
         'mobile' => !$isEmail ? ($cleanPhone ?: $identifier) : '',
@@ -156,7 +146,7 @@ if ($action === 'register' || $action === 'signup' || $action === 'set-password'
         'message' => 'Account created successfully.',
         'user' => [
             'id' => $userId,
-            'name' => $name,
+            'name' => $newUser['name'],
             'email' => $newUser['email'],
             'mobile' => $newUser['mobile'],
             'identifier' => $identifier,
@@ -166,7 +156,7 @@ if ($action === 'register' || $action === 'signup' || $action === 'set-password'
     exit();
 }
 
-// 2. SIGN IN / DIRECT LOGIN
+// 2. SIGN IN / LOGIN (STRICT PASSWORD CHECK)
 if ($action === 'login') {
     $identifier = trim($input['identifier'] ?? '');
     $password = trim($input['password'] ?? '');
@@ -186,51 +176,34 @@ if ($action === 'login') {
         }
     }
 
+    // 1. Account Not Found Check (No auto-creating fake accounts on login)
     if (!$matchedUser) {
-        // Auto-create account seamlessly on first sign-in
-        $isEmail = strpos($identifier, '@') !== false;
-        $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
-        $userId = 'usr_' . time() . '_' . substr(bin2hex(random_bytes(4)), 0, 6);
-        $token = bin2hex(random_bytes(24));
-        
-        $defaultName = $isEmail ? ucfirst(explode('@', $identifier)[0]) : 'User ' . substr($identifier, -4);
-        
-        $newUser = [
-            'id' => $userId,
-            'name' => $defaultName,
-            'identifier' => $identifier,
-            'email' => $isEmail ? strtolower($identifier) : '',
-            'mobile' => !$isEmail ? ($cleanPhone ?: $identifier) : '',
-            'password_hash' => password_hash($password, PASSWORD_BCRYPT),
-            'token' => $token,
-            'created_at' => date('c'),
-            'updated_at' => date('c'),
-            'last_login' => date('c')
-        ];
-
-        $users[] = $newUser;
-        saveUsers($usersFile, $users);
-
         echo json_encode([
-            'success' => true,
-            'message' => 'Account created and logged in successfully.',
-            'user' => [
-                'id' => $userId,
-                'name' => $newUser['name'],
-                'email' => $newUser['email'],
-                'mobile' => $newUser['mobile'],
-                'identifier' => $identifier,
-                'token' => $token
-            ]
+            'success' => false, 
+            'message' => 'Account not found with this Mobile Number or Email ID. Please check your credentials or click Sign Up to create an account.'
         ]);
         exit();
     }
 
-    if (!password_verify($password, $matchedUser['password_hash']) && $password !== $matchedUser['password_hash']) {
-        echo json_encode(['success' => false, 'message' => 'Incorrect password. Please verify your password or click Forgot Password.']);
+    // 2. Strict Password Verification against bcrypt hash
+    $storedHash = $matchedUser['password_hash'] ?? '';
+    $isPasswordValid = false;
+    
+    if (!empty($storedHash)) {
+        if (password_verify($password, $storedHash) || $password === $storedHash) {
+            $isPasswordValid = true;
+        }
+    }
+
+    if (!$isPasswordValid) {
+        echo json_encode([
+            'success' => false, 
+            'message' => 'Incorrect password. Please enter the password you created during signup or click Forgot Password.'
+        ]);
         exit();
     }
 
+    // 3. Issue new session token
     $token = bin2hex(random_bytes(24));
     $matchedUser['token'] = $token;
     $matchedUser['last_login'] = date('c');
@@ -290,7 +263,7 @@ if ($action === 'reset-password') {
     }
 
     if (!$found) {
-        echo json_encode(['success' => false, 'message' => 'No account registered with that email or mobile number.']);
+        echo json_encode(['success' => false, 'message' => 'No account found with this Mobile Number or Email ID. Please Sign Up.']);
         exit();
     }
 }
@@ -364,9 +337,6 @@ if ($action === 'delete-account') {
         if (!$isMatch && !empty($identifier) && matchesUser($u, $identifier)) {
             $isMatch = true;
         }
-        if (!$isMatch && !empty($userId) && matchesUser($u, $userId)) {
-            $isMatch = true;
-        }
 
         if ($isMatch) {
             $found = true;
@@ -383,7 +353,7 @@ if ($action === 'delete-account') {
                 @unlink($dataFile);
             }
         } else {
-            $newUsers[] = $u;
+            $newUsers[] = $newUsers[] = $u;
         }
     }
 

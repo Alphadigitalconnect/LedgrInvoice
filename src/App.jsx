@@ -61,6 +61,12 @@ export default function App() {
     StorageService.setAuthUser(user);
     setIsAuthenticated(true);
 
+    // Immediately load this user's scoped local data
+    setEntities(StorageService.getEntities());
+    setClients(StorageService.getClients());
+    setEngagements(StorageService.getEngagements());
+    setInvoices(StorageService.getInvoices());
+
     // Pull user's Hostinger cloud data if present
     if (user && user.id) {
       const cloudData = await StorageService.loadFromHostinger(user.id);
@@ -78,6 +84,10 @@ export default function App() {
     StorageService.clearAuthUser();
     setAuthUser(null);
     setIsAuthenticated(false);
+    setEntities([]);
+    setClients([]);
+    setEngagements([]);
+    setInvoices([]);
   };
 
   const handleProfileUpdated = (updatedUser) => {
