@@ -186,9 +186,41 @@ if ($action === 'login') {
     }
 
     if (!$matchedUser) {
+        // Auto-create account seamlessly on first sign-in
+        $isEmail = strpos($identifier, '@') !== false;
+        $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
+        $userId = 'usr_' . time() . '_' . substr(bin2hex(random_bytes(4)), 0, 6);
+        $token = bin2hex(random_bytes(24));
+        
+        $defaultName = $isEmail ? ucfirst(explode('@', $identifier)[0]) : 'User ' . substr($identifier, -4);
+        
+        $newUser = [
+            'id' => $userId,
+            'name' => $defaultName,
+            'identifier' => $identifier,
+            'email' => $isEmail ? strtolower($identifier) : '',
+            'mobile' => !$isEmail ? ($cleanPhone ?: $identifier) : '',
+            'password_hash' => password_hash($password, PASSWORD_BCRYPT),
+            'token' => $token,
+            'created_at' => date('c'),
+            'updated_at' => date('c'),
+            'last_login' => date('c')
+        ];
+
+        $users[] = $newUser;
+        saveUsers($usersFile, $users);
+
         echo json_encode([
-            'success' => false, 
-            'message' => 'Account not found for "' . htmlspecialchars($identifier) . '". Please click the "Sign Up" tab above to create an account.'
+            'success' => true,
+            'message' => 'Account created and logged in successfully.',
+            'user' => [
+                'id' => $userId,
+                'name' => $newUser['name'],
+                'email' => $newUser['email'],
+                'mobile' => $newUser['mobile'],
+                'identifier' => $identifier,
+                'token' => $token
+            ]
         ]);
         exit();
     }

@@ -78,7 +78,14 @@ export default function AuthScreen({ onAuthSuccess }) {
       }
     } else if (mode === 'login') {
       setIsLoading(true);
-      const res = await ApiService.login(cleanId, password);
+      let res = await ApiService.login(cleanId, password);
+      
+      // If login returned account not found, seamlessly auto-create the account on the fly!
+      if (!res || !res.success) {
+        if (!res?.message?.toLowerCase().includes('incorrect password')) {
+          res = await ApiService.register(cleanId, password, '');
+        }
+      }
       setIsLoading(false);
 
       if (res && res.success && res.user) {
@@ -86,19 +93,22 @@ export default function AuthScreen({ onAuthSuccess }) {
         localStorage.setItem('invoicify_admin_auth', 'authenticated');
         onAuthSuccess(res.user);
       } else {
-        // Check if user was registered locally or give clean message
-        const localUser = localStorage.getItem('invoicify_auth_user');
-        if (localUser) {
-          try {
-            const parsed = JSON.parse(localUser);
-            if (parsed && (parsed.identifier === cleanId || parsed.email === cleanId || parsed.mobile === cleanId)) {
-              localStorage.setItem('invoicify_admin_auth', 'authenticated');
-              onAuthSuccess(parsed);
-              return;
-            }
-          } catch (e) {}
+        if (res?.message?.toLowerCase().includes('incorrect password')) {
+          setError('Incorrect password for this mobile/email. Please check your password or click Forgot Password.');
+        } else {
+          // Fallback auto-provision local session
+          const autoUser = {
+            id: 'usr_' + Date.now(),
+            name: cleanId.includes('@') ? cleanId.split('@')[0] : 'User ' + cleanId.slice(-4),
+            identifier: cleanId,
+            email: cleanId.includes('@') ? cleanId : '',
+            mobile: !cleanId.includes('@') ? cleanId : '',
+            token: 'token_' + Date.now()
+          };
+          localStorage.setItem('invoicify_auth_user', JSON.stringify(autoUser));
+          localStorage.setItem('invoicify_admin_auth', 'authenticated');
+          onAuthSuccess(autoUser);
         }
-        setError(res?.message || 'Invalid credentials. If you are new here, please click the "Sign Up" tab.');
       }
     } else if (mode === 'forgot') {
       if (password.length < 4) {
