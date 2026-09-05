@@ -76,30 +76,32 @@ function matchesUser($user, $identifier) {
 }
 
 function sendOTPEmail($toEmail, $otp, $name) {
-    $subject = "Your LEDGR Portal Verification Code: " . $otp;
+    $fromEmail = 'noreply@lavenderblush-wren-342345.hostingersite.com';
+    $subject = "Your LEDGR Verification Code: " . $otp;
     $headers = "MIME-Version: 1.0\r\n";
-    $headers .= "Content-type:text/html;charset=UTF-8\r\n";
-    $headers .= "From: LEDGR Security <no-reply@lavenderblush-wren-342345.hostingersite.com>\r\n";
-    $headers .= "Reply-To: no-reply@lavenderblush-wren-342345.hostingersite.com\r\n";
+    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+    $headers .= "From: LEDGR Security <" . $fromEmail . ">\r\n";
+    $headers .= "Reply-To: " . $fromEmail . "\r\n";
+    $headers .= "Return-Path: " . $fromEmail . "\r\n";
     $headers .= "X-Mailer: PHP/" . phpversion();
 
-    $html = '<div style="max-width:500px;margin:0 auto;font-family:Arial,sans-serif;padding:24px;border:1px solid #e2e8f0;border-radius:14px;background:#ffffff;">';
-    $html .= '<div style="text-align:center;padding-bottom:16px;border-bottom:1px solid #f1f5f9;">';
-    $html .= '<h2 style="color:#0f172a;margin:0;font-size:20px;font-weight:bold;">LEDGR Portal</h2>';
-    $html .= '<p style="color:#64748b;font-size:12px;margin:4px 0 0;">Multi-Entity Invoicing & Business Management</p>';
+    $html = '<div style="max-width:520px;margin:0 auto;font-family:\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;padding:28px;border:1px solid #e2e8f0;border-radius:16px;background:#ffffff;box-shadow:0 4px 12px rgba(0,0,0,0.05);">';
+    $html .= '<div style="text-align:center;padding-bottom:20px;border-bottom:1px solid #f1f5f9;">';
+    $html .= '<h2 style="color:#0f172a;margin:0;font-size:22px;font-weight:800;letter-spacing:-0.5px;">LEDGR Portal</h2>';
+    $html .= '<p style="color:#64748b;font-size:12px;margin:4px 0 0;">Multi-Entity Invoicing & Entity Portal</p>';
     $html .= '</div>';
-    $html .= '<div style="padding:24px 0;text-align:center;">';
-    $html .= '<p style="color:#334155;font-size:14px;margin-bottom:16px;">Hello ' . htmlspecialchars($name ?: 'User') . ',</p>';
-    $html .= '<p style="color:#334155;font-size:13px;line-height:1.5;">Your secure 6-digit One-Time Password (OTP) for account login is:</p>';
-    $html .= '<div style="margin:20px auto;display:inline-block;padding:14px 32px;background:#f8fafc;border:2px dashed #0f172a;border-radius:10px;font-size:32px;font-weight:bold;letter-spacing:8px;color:#0f172a;font-family:monospace;">' . $otp . '</div>';
-    $html .= '<p style="color:#94a3b8;font-size:12px;margin-top:16px;">This OTP is valid for 10 minutes. If you did not request this login, please ignore this email.</p>';
+    $html .= '<div style="padding:28px 0;text-align:center;">';
+    $html .= '<p style="color:#334155;font-size:15px;margin-bottom:16px;">Hello <strong>' . htmlspecialchars($name ?: 'User') . '</strong>,</p>';
+    $html .= '<p style="color:#475569;font-size:13px;line-height:1.6;margin:0 0 20px;">Your 6-digit verification code (OTP) to securely log in to your LEDGR workspace is:</p>';
+    $html .= '<div style="margin:20px auto;display:inline-block;padding:16px 36px;background:#f8fafc;border:2px dashed #0f172a;border-radius:12px;font-size:36px;font-weight:bold;letter-spacing:10px;color:#0f172a;font-family:Consolas,monospace;">' . $otp . '</div>';
+    $html .= '<p style="color:#94a3b8;font-size:12px;margin-top:20px;">This OTP is valid for <strong>10 minutes</strong>. Please do not share this code with anyone.</p>';
     $html .= '</div>';
-    $html .= '<div style="border-top:1px solid #f1f5f9;padding-top:14px;text-align:center;color:#94a3b8;font-size:11px;">';
-    $html .= 'LEDGR Secure Multi-Entity Cloud Portal • Hosted on Hostinger';
+    $html .= '<div style="border-top:1px solid #f1f5f9;padding-top:16px;text-align:center;color:#94a3b8;font-size:11px;">';
+    $html .= 'Sent securely by LEDGR Portal from <strong>noreply@lavenderblush-wren-342345.hostingersite.com</strong> • Hosted on Hostinger';
     $html .= '</div>';
     $html .= '</div>';
 
-    return @mail($toEmail, $subject, $html, $headers);
+    return @mail($toEmail, $subject, $html, $headers, "-f" . $fromEmail);
 }
 
 $action = isset($_GET['action']) ? trim($_GET['action']) : '';
