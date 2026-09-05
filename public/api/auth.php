@@ -1,8 +1,11 @@
 <?php
 // Hostinger Authentication API for LEDGR Portal
+error_reporting(0);
+ini_set('display_errors', '0');
+
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-User-Id, X-Auth-Token");
 header("Content-Type: application/json; charset=UTF-8");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -10,35 +13,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-$storageDir = __DIR__ . '/../storage';
+$storageDir = __DIR__ . '/storage_data';
 if (!is_dir($storageDir)) {
-    @mkdir($storageDir, 0755, true);
+    @mkdir($storageDir, 0777, true);
 }
 
 // Protect storage folder from direct HTTP access
 $htaccessPath = $storageDir . '/.htaccess';
 if (!file_exists($htaccessPath)) {
-    file_put_contents($htaccessPath, "Deny from all\n");
+    @file_put_contents($htaccessPath, "Deny from all\n");
 }
 
 $usersFile = $storageDir . '/users.json';
 if (!file_exists($usersFile)) {
-    file_put_contents($usersFile, json_encode([], JSON_PRETTY_PRINT));
+    @file_put_contents($usersFile, json_encode([], JSON_PRETTY_PRINT));
 }
 
 function getUsers($usersFile) {
+    if (!file_exists($usersFile)) return [];
     $raw = @file_get_contents($usersFile);
     $data = json_decode($raw, true);
     return is_array($data) ? $data : [];
 }
 
 function saveUsers($usersFile, $users) {
-    file_put_contents($usersFile, json_encode($users, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    @file_put_contents($usersFile, json_encode($users, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
+function matchesUser($user, $identifier) {
+    $idLow = strtolower(trim($identifier));
+    $userEmailLow = strtolower(trim($user['email'] ?? ''));
+    $userMobile = preg_replace('/[^0-9]/', '', $user['mobile'] ?? '');
+    $userRawMobile = strtolower(trim($user['mobile'] ?? ''));
+    $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
+    $storedIdentifier = strtolower(trim($user['identifier'] ?? ''));
+
+    if (!empty($userEmailLow) && $userEmailLow === $idLow) return true;
+    if (!empty($storedIdentifier) && $storedIdentifier === $idLow) return true;
+    if (!empty($cleanPhone) && !empty($userMobile) && ($userMobile === $cleanPhone || (strlen($cleanPhone) >= 7 && str_ends_with($userMobile, $cleanPhone)) || (strlen($userMobile) >= 7 && str_ends_with($cleanPhone, $userMobile)))) return true;
+    if (!empty($userRawMobile) && $userRawMobile === $idLow) return true;
+    return false;
 }
 
 $action = isset($_GET['action']) ? trim($_GET['action']) : '';
-$input = json_decode(file_get_contents('php://input'), true) ?? [];
+$input = json_decode(file_get_contents('php://input'), true);
+if (!is_array($input)) {
+    $input = [];
+}
 
+// 1. REGISTER OR SET PASSWORD
 if ($action === 'register' || $action === 'set-password') {
     $identifier = trim($input['identifier'] ?? '');
     $password = trim($input['password'] ?? '');
@@ -46,7 +69,7 @@ if ($action === 'register' || $action === 'set-password') {
 
     if (empty($identifier)) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Please provide an email address or mobile number.']);
+        echo json_encode(['success' => false, 'message' => 'Please provide a Mobile Number or Email ID.']);
         exit();
     }
 
@@ -56,37 +79,33 @@ if ($action === 'register' || $action === 'set-password') {
         exit();
     }
 
-    $isEmail = filter_var($identifier, FILTER_VALIDATE_EMAIL) !== false;
+    $isEmail = strpos($identifier, '@') !== false;
     $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
 
     $users = getUsers($usersFile);
     
-    // Check if user exists
+    // Check if user already exists -> update credentials
     foreach ($users as &$existing) {
-        $matches = false;
-        if ($isEmail && strtolower($existing['email'] ?? '') === strtolower($identifier)) {
-            $matches = true;
-        } elseif (!$isEmail && ($existing['mobile'] ?? '') === $cleanPhone) {
-            $matches = true;
-        }
-
-        if ($matches) {
-            // Update password / profile
+        if (matchesUser($existing, $identifier)) {
             $existing['password_hash'] = password_hash($password, PASSWORD_BCRYPT);
             if (!empty($name)) $existing['name'] = $name;
+            $existing['identifier'] = $identifier;
+            if ($isEmail) $existing['email'] = strtolower($identifier);
+            if (!$isEmail && !empty($cleanPhone)) $existing['mobile'] = $cleanPhone;
             $existing['updated_at'] = date('c');
-            $token = bin2hex(random_bytes(32));
+            $token = bin2hex(random_bytes(24));
             $existing['token'] = $token;
             saveUsers($usersFile, $users);
 
             echo json_encode([
                 'success' => true,
-                'message' => 'Password set successfully.',
+                'message' => 'Password and credentials updated successfully.',
                 'user' => [
                     'id' => $existing['id'],
                     'name' => $existing['name'],
-                    'email' => $existing['email'],
-                    'mobile' => $existing['mobile'],
+                    'email' => $existing['email'] ?? '',
+                    'mobile' => $existing['mobile'] ?? '',
+                    'identifier' => $existing['identifier'] ?? $identifier,
                     'token' => $token
                 ]
             ]);
@@ -94,15 +113,16 @@ if ($action === 'register' || $action === 'set-password') {
         }
     }
 
-    // Create new user
+    // New user creation
     $userId = 'usr_' . time() . '_' . substr(bin2hex(random_bytes(4)), 0, 6);
-    $token = bin2hex(random_bytes(32));
+    $token = bin2hex(random_bytes(24));
     
     $newUser = [
         'id' => $userId,
         'name' => $name,
+        'identifier' => $identifier,
         'email' => $isEmail ? strtolower($identifier) : '',
-        'mobile' => !$isEmail ? $cleanPhone : '',
+        'mobile' => !$isEmail ? ($cleanPhone ?: $identifier) : '',
         'password_hash' => password_hash($password, PASSWORD_BCRYPT),
         'token' => $token,
         'created_at' => date('c'),
@@ -114,59 +134,53 @@ if ($action === 'register' || $action === 'set-password') {
 
     echo json_encode([
         'success' => true,
-        'message' => 'Account created successfully.',
+        'message' => 'Account registered successfully.',
         'user' => [
             'id' => $userId,
             'name' => $name,
             'email' => $newUser['email'],
             'mobile' => $newUser['mobile'],
+            'identifier' => $identifier,
             'token' => $token
         ]
     ]);
     exit();
 }
 
+// 2. SIGN IN / LOGIN
 if ($action === 'login') {
     $identifier = trim($input['identifier'] ?? '');
     $password = trim($input['password'] ?? '');
 
     if (empty($identifier) || empty($password)) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Please enter your email/mobile and password.']);
+        echo json_encode(['success' => false, 'message' => 'Please enter your Mobile / Email and password.']);
         exit();
     }
-
-    $isEmail = filter_var($identifier, FILTER_VALIDATE_EMAIL) !== false;
-    $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
 
     $users = getUsers($usersFile);
     $matchedUser = null;
 
     foreach ($users as &$u) {
-        if ($isEmail && strtolower($u['email'] ?? '') === strtolower($identifier)) {
-            $matchedUser = &$u;
-            break;
-        }
-        if (!$isEmail && !empty($cleanPhone) && ($u['mobile'] ?? '') === $cleanPhone) {
+        if (matchesUser($u, $identifier)) {
             $matchedUser = &$u;
             break;
         }
     }
 
     if (!$matchedUser) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'message' => 'Account not found. Please sign up or check your credentials.']);
+        http_response_code(404);
+        echo json_encode(['success' => false, 'message' => 'Account not found. Please click "Set Password / Sign Up" to register.']);
         exit();
     }
 
     if (!password_verify($password, $matchedUser['password_hash'])) {
         http_response_code(401);
-        echo json_encode(['success' => false, 'message' => 'Incorrect password. Please try again.']);
+        echo json_encode(['success' => false, 'message' => 'Incorrect password. Please verify or reset your password.']);
         exit();
     }
 
-    // Refresh token
-    $token = bin2hex(random_bytes(32));
+    $token = bin2hex(random_bytes(24));
     $matchedUser['token'] = $token;
     $matchedUser['last_login'] = date('c');
     saveUsers($usersFile, $users);
@@ -177,35 +191,33 @@ if ($action === 'login') {
         'user' => [
             'id' => $matchedUser['id'],
             'name' => $matchedUser['name'],
-            'email' => $matchedUser['email'],
-            'mobile' => $matchedUser['mobile'],
+            'email' => $matchedUser['email'] ?? '',
+            'mobile' => $matchedUser['mobile'] ?? '',
+            'identifier' => $matchedUser['identifier'] ?? $identifier,
             'token' => $token
         ]
     ]);
     exit();
 }
 
+// 3. RESET PASSWORD
 if ($action === 'reset-password') {
     $identifier = trim($input['identifier'] ?? '');
     $newPassword = trim($input['new_password'] ?? '');
 
     if (empty($identifier) || empty($newPassword) || strlen($newPassword) < 4) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Valid identifier and minimum 4-character password required.']);
+        echo json_encode(['success' => false, 'message' => 'Please provide a valid identifier and min 4-character password.']);
         exit();
     }
-
-    $isEmail = filter_var($identifier, FILTER_VALIDATE_EMAIL) !== false;
-    $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
 
     $users = getUsers($usersFile);
     $found = false;
 
     foreach ($users as &$u) {
-        if (($isEmail && strtolower($u['email'] ?? '') === strtolower($identifier)) ||
-            (!$isEmail && !empty($cleanPhone) && ($u['mobile'] ?? '') === $cleanPhone)) {
+        if (matchesUser($u, $identifier)) {
             $u['password_hash'] = password_hash($newPassword, PASSWORD_BCRYPT);
-            $token = bin2hex(random_bytes(32));
+            $token = bin2hex(random_bytes(24));
             $u['token'] = $token;
             $u['updated_at'] = date('c');
             $found = true;
@@ -217,8 +229,9 @@ if ($action === 'reset-password') {
                 'user' => [
                     'id' => $u['id'],
                     'name' => $u['name'],
-                    'email' => $u['email'],
-                    'mobile' => $u['mobile'],
+                    'email' => $u['email'] ?? '',
+                    'mobile' => $u['mobile'] ?? '',
+                    'identifier' => $u['identifier'] ?? $identifier,
                     'token' => $token
                 ]
             ]);
@@ -233,5 +246,106 @@ if ($action === 'reset-password') {
     }
 }
 
+// 4. UPDATE PROFILE
+if ($action === 'update-profile') {
+    $userId = trim($input['userId'] ?? '');
+    $name = trim($input['name'] ?? '');
+    $email = trim($input['email'] ?? '');
+    $mobile = trim($input['mobile'] ?? '');
+    $newPassword = trim($input['new_password'] ?? '');
+
+    if (empty($userId)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'User ID is required.']);
+        exit();
+    }
+
+    $users = getUsers($usersFile);
+    $found = false;
+
+    foreach ($users as &$u) {
+        if ($u['id'] === $userId) {
+            if (!empty($name)) $u['name'] = $name;
+            if (!empty($email)) $u['email'] = strtolower($email);
+            if (!empty($mobile)) $u['mobile'] = $mobile;
+            if (!empty($newPassword) && strlen($newPassword) >= 4) {
+                $u['password_hash'] = password_hash($newPassword, PASSWORD_BCRYPT);
+            }
+            $u['updated_at'] = date('c');
+            $found = true;
+            saveUsers($usersFile, $users);
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Profile updated successfully.',
+                'user' => [
+                    'id' => $u['id'],
+                    'name' => $u['name'],
+                    'email' => $u['email'] ?? '',
+                    'mobile' => $u['mobile'] ?? '',
+                    'identifier' => $u['identifier'] ?? ($u['email'] ?: $u['mobile']),
+                    'token' => $u['token'] ?? ''
+                ]
+            ]);
+            exit();
+        }
+    }
+
+    if (!$found) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'message' => 'User not found.']);
+        exit();
+    }
+}
+
+// 5. DELETE ACCOUNT
+if ($action === 'delete-account') {
+    $userId = trim($input['userId'] ?? '');
+    $password = trim($input['password'] ?? '');
+
+    if (empty($userId)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'User ID is required.']);
+        exit();
+    }
+
+    $users = getUsers($usersFile);
+    $newUsers = [];
+    $found = false;
+
+    foreach ($users as $u) {
+        if ($u['id'] === $userId) {
+            $found = true;
+            // Optionally check password if provided
+            if (!empty($password) && !password_verify($password, $u['password_hash'])) {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'message' => 'Incorrect password. Cannot delete account.']);
+                exit();
+            }
+            // Delete associated workspace data file
+            $cleanUserId = preg_replace('/[^a-zA-Z0-9_-]/', '_', $userId);
+            $dataFile = $storageDir . '/data_' . $cleanUserId . '.json';
+            if (file_exists($dataFile)) {
+                @unlink($dataFile);
+            }
+        } else {
+            $newUsers[] = $u;
+        }
+    }
+
+    if ($found) {
+        saveUsers($usersFile, $newUsers);
+        echo json_encode([
+            'success' => true,
+            'message' => 'Account and all associated workspace data have been permanently deleted.'
+        ]);
+        exit();
+    } else {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'message' => 'User account not found.']);
+        exit();
+    }
+}
+
 http_response_code(400);
-echo json_encode(['success' => false, 'message' => 'Invalid action.']);
+echo json_encode(['success' => false, 'message' => 'Invalid action specified.']);

@@ -11,21 +11,17 @@ export const ApiService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier, password, name })
       });
-      const data = await res.json();
-      return data;
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return { success: false, message: 'Server response error. Please try again.' };
+      }
     } catch (e) {
-      console.warn('Backend API request failed, operating in offline mode:', e);
-      // Local fallback
+      console.warn('Backend API request failed:', e);
       return {
-        success: true,
-        offline: true,
-        user: {
-          id: 'local_user_' + Date.now(),
-          name: name || 'Account Owner',
-          email: identifier.includes('@') ? identifier : '',
-          mobile: !identifier.includes('@') ? identifier : '',
-          token: 'local_token_' + Date.now()
-        }
+        success: false,
+        message: 'Could not connect to server. Please check your network connection.'
       };
     }
   },
@@ -38,13 +34,21 @@ export const ApiService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier, password })
       });
-      const data = await res.json();
-      return data;
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        return data;
+      } catch (e) {
+        return {
+          success: false,
+          message: 'Invalid response from server. ' + text.slice(0, 80)
+        };
+      }
     } catch (e) {
-      console.warn('Backend API request failed, fallback to local check:', e);
+      console.warn('Backend API request failed:', e);
       return {
         success: false,
-        message: 'Could not connect to authentication server. Please check your network.'
+        message: 'Could not reach server. Please check your network or try again.'
       };
     }
   },
@@ -57,13 +61,61 @@ export const ApiService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier, new_password: newPassword })
       });
-      const data = await res.json();
-      return data;
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return { success: false, message: 'Server error while resetting password.' };
+      }
     } catch (e) {
       return {
         success: false,
-        message: 'Failed to connect to server.'
+        message: 'Failed to connect to authentication server.'
       };
+    }
+  },
+
+  // User Profile: Update Name, Email, Mobile, or Password
+  async updateProfile(userId, { name, email, mobile, newPassword }) {
+    try {
+      const res = await fetch(`${API_BASE}/auth.php?action=update-profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          name,
+          email,
+          mobile,
+          new_password: newPassword
+        })
+      });
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return { success: false, message: 'Failed to update profile.' };
+      }
+    } catch (e) {
+      return { success: false, message: 'Network error updating profile.' };
+    }
+  },
+
+  // User Account: Delete Account & Cloud Data
+  async deleteAccount(userId, password) {
+    try {
+      const res = await fetch(`${API_BASE}/auth.php?action=delete-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, password })
+      });
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return { success: false, message: 'Failed to delete account.' };
+      }
+    } catch (e) {
+      return { success: false, message: 'Network error deleting account.' };
     }
   },
 
@@ -74,11 +126,16 @@ export const ApiService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': userId || 'default_user'
+          'X-User-Id': userId || 'default_workspace'
         },
         body: JSON.stringify(payload)
       });
-      return await res.json();
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return { success: false, error: 'Malformed response' };
+      }
     } catch (e) {
       console.warn('Hostinger cloud sync error:', e);
       return { success: false, error: e.message };
@@ -90,10 +147,11 @@ export const ApiService = {
     try {
       const res = await fetch(`${API_BASE}/data.php`, {
         headers: {
-          'X-User-Id': userId || 'default_user'
+          'X-User-Id': userId || 'default_workspace'
         }
       });
-      const json = await res.json();
+      const text = await res.text();
+      const json = JSON.parse(text);
       if (json.success && json.data) {
         return json.data;
       }

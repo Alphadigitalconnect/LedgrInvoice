@@ -15,6 +15,7 @@ import LedgrLogo from './components/common/LedgrLogo';
 
 // Auth
 import AuthScreen from './components/Auth/AuthScreen';
+import ProfileModal from './components/Auth/ProfileModal';
 
 // Navigation & Layout
 import Sidebar from './components/Navigation/Sidebar';
@@ -74,6 +75,19 @@ export default function App() {
     setIsAuthenticated(false);
   };
 
+  const handleProfileUpdated = (updatedUser) => {
+    setAuthUser(updatedUser);
+    StorageService.setAuthUser(updatedUser);
+  };
+
+  const handleAccountDeleted = () => {
+    StorageService.resetAllData();
+    localStorage.removeItem('invoicify_admin_auth');
+    StorageService.clearAuthUser();
+    setAuthUser(null);
+    setIsAuthenticated(false);
+    setIsProfileModalOpen(false);
+  };
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -95,6 +109,7 @@ export default function App() {
   const [paymentModalInvoice, setPaymentModalInvoice] = useState(null);
   const [clientModalData, setClientModalData] = useState(null); // null or { client: clientObj }
   const [isAddEntityModalOpen, setIsAddEntityModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Invoice creation initial props
   const [invoiceContext, setInvoiceContext] = useState({
@@ -103,6 +118,7 @@ export default function App() {
     engagementId: null,
     editingInvoice: null
   });
+
 
   // Handlers for Invoices
   const handleOpenCreateInvoice = (ctx = {}) => {
@@ -275,6 +291,7 @@ export default function App() {
         onOpenAddEntity={() => setIsAddEntityModalOpen(true)}
         onLogout={handleLogout}
         authUser={authUser}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -417,6 +434,15 @@ export default function App() {
         </button>
       </nav>
 
+      {/* Global User Profile & Account Modal */}
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        authUser={authUser}
+        onProfileUpdated={handleProfileUpdated}
+        onAccountDeleted={handleAccountDeleted}
+      />
+
       {/* Global Invoice Preview Modal */}
       {previewInvoice && (
         <InvoicePreview
@@ -475,3 +501,4 @@ export default function App() {
     </div>
   );
 }
+

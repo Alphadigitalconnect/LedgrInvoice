@@ -12,7 +12,7 @@ import {
   AlertCircle, 
   CheckCircle2,
   Sparkles,
-  RefreshCw
+  UserPlus
 } from 'lucide-react';
 import LedgrLogo from '../common/LedgrLogo';
 import { ApiService } from '../../services/api';
@@ -33,7 +33,8 @@ export default function AuthScreen({ onAuthSuccess }) {
     setError('');
     setSuccessMsg('');
 
-    if (!identifier.trim()) {
+    const cleanId = identifier.trim();
+    if (!cleanId) {
       setError('Please enter your Mobile Number or Email ID.');
       return;
     }
@@ -54,7 +55,7 @@ export default function AuthScreen({ onAuthSuccess }) {
       }
 
       setIsLoading(true);
-      const res = await ApiService.register(identifier.trim(), password, name.trim());
+      const res = await ApiService.register(cleanId, password, name.trim());
       setIsLoading(false);
 
       if (res.success && res.user) {
@@ -66,7 +67,7 @@ export default function AuthScreen({ onAuthSuccess }) {
       }
     } else if (mode === 'login') {
       setIsLoading(true);
-      const res = await ApiService.login(identifier.trim(), password);
+      const res = await ApiService.login(cleanId, password);
       setIsLoading(false);
 
       if (res.success && res.user) {
@@ -74,7 +75,7 @@ export default function AuthScreen({ onAuthSuccess }) {
         localStorage.setItem('invoicify_admin_auth', 'authenticated');
         onAuthSuccess(res.user);
       } else {
-        setError(res.message || 'Invalid credentials. Please verify your email/mobile or set a new password.');
+        setError(res.message || 'Invalid credentials. If this is your first time, click "Set Password / Sign Up" above.');
       }
     } else if (mode === 'forgot') {
       if (password.length < 4) {
@@ -83,7 +84,7 @@ export default function AuthScreen({ onAuthSuccess }) {
       }
 
       setIsLoading(true);
-      const res = await ApiService.resetPassword(identifier.trim(), password);
+      const res = await ApiService.resetPassword(cleanId, password);
       setIsLoading(false);
 
       if (res.success && res.user) {
@@ -159,13 +160,13 @@ export default function AuthScreen({ onAuthSuccess }) {
           </div>
           <div className="text-left">
             <div className="text-xs font-bold text-slate-900">
-              {mode === 'login' && 'Account Authentication'}
+              {mode === 'login' && 'Account Sign In'}
               {mode === 'register' && 'Set Credentials & Password'}
               {mode === 'forgot' && 'Reset Password'}
             </div>
             <p className="text-[11px] text-slate-500">
-              {mode === 'login' && 'Sign in using your registered mobile number or email ID'}
-              {mode === 'register' && 'Register your mobile number / email ID and set password'}
+              {mode === 'login' && 'Enter your registered mobile number or email and password'}
+              {mode === 'register' && 'Enter your mobile/email and create a new password to get your private workspace'}
               {mode === 'forgot' && 'Set a new password for your mobile or email'}
             </p>
           </div>
@@ -209,7 +210,7 @@ export default function AuthScreen({ onAuthSuccess }) {
                   setIdentifier(e.target.value);
                   setError('');
                 }}
-                placeholder="e.g. 9876543210 or admin@firm.com"
+                placeholder="e.g. 9876543210 or admin@scandassociates.com"
                 className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 transition"
               />
             </div>
@@ -283,9 +284,26 @@ export default function AuthScreen({ onAuthSuccess }) {
           )}
 
           {error && (
-            <div className="flex items-center gap-2 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-medium">
-              <AlertCircle size={14} className="flex-shrink-0" />
-              <span>{error}</span>
+            <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-medium space-y-1 text-left">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={14} className="flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+              {mode === 'login' && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('register');
+                      setError('');
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] text-rose-800 font-bold hover:underline cursor-pointer"
+                  >
+                    <UserPlus size={12} />
+                    <span>Click here to Set Password / Register account</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
