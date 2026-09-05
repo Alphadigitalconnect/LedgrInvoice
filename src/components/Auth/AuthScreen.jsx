@@ -116,10 +116,10 @@ export default function AuthScreen({ onAuthSuccess }) {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              LEDGR Portal
+              LEDGR
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Multi-Entity Invoicing & Business Management
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">
+              Beyond Invoicing !!!
             </p>
           </div>
         </div>
@@ -189,7 +189,7 @@ export default function AuthScreen({ onAuthSuccess }) {
             </div>
             <p className="text-[11px] text-slate-500">
               {mode === 'login' && 'Enter your Mobile Number or Email ID and Password'}
-              {mode === 'register' && 'Sign up to create your multi-entity billing workspace'}
+              {mode === 'register' && 'Sign up to create your billing workspace'}
               {mode === 'forgot' && 'Set a new password for your registered account'}
             </p>
           </div>
@@ -211,7 +211,7 @@ export default function AuthScreen({ onAuthSuccess }) {
                   id="auth-input-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. CA Sushanth / SC & Associates"
+                  placeholder="e.g. Your Name / Business Name"
                   className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 transition"
                 />
               </div>
@@ -235,7 +235,7 @@ export default function AuthScreen({ onAuthSuccess }) {
                   setIdentifier(e.target.value);
                   setError('');
                 }}
-                placeholder="e.g. 8978968432 or admin@scandassociates.com"
+                placeholder="Enter your Mobile Number or Email ID"
                 className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 transition"
               />
             </div>
@@ -375,13 +375,6 @@ export default function AuthScreen({ onAuthSuccess }) {
             </button>
           )}
         </form>
-      </div>
-
-      {/* Footer info */}
-      <div className="mt-6 text-center text-xs text-slate-400 flex items-center gap-1.5">
-        <span>Hosted securely on Hostinger</span>
-        <span>•</span>
-        <span>LEDGR Multi-Entity Invoicing</span>
       </div>
     </div>
   );

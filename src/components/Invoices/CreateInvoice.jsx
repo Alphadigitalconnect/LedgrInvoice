@@ -956,7 +956,7 @@ export default function CreateInvoice({
                   type="text"
                   value={signatoryName}
                   onChange={(e) => setSignatoryName(e.target.value)}
-                  placeholder="CA Sushanth Cherukuri"
+                  placeholder="Authorized Signatory Name"
                   className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:ring-1 focus:ring-slate-400 focus:outline-none"
                 />
               </div>

@@ -474,7 +474,7 @@ export default function EntitySettings({ entities, onSaveEntity, onOpenAddEntity
                   ...formData,
                   signatory: { ...(formData.signatory || {}), name: e.target.value }
                 })}
-                placeholder="CA Sushanth Cherukuri"
+                placeholder="Authorized Signatory Name"
                 className="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-400 focus:outline-none font-medium"
               />
             </div>

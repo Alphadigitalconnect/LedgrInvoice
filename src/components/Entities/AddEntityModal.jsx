@@ -220,7 +220,7 @@ export default function AddEntityModal({ isOpen, onClose, onSaveEntity }) {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Sushanth & Associates LLP"
+                  placeholder="e.g. Apex Enterprises LLP"
                   className="w-full p-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium focus:ring-1 focus:ring-slate-400 focus:outline-none"
                 />
               </div>
@@ -231,7 +231,7 @@ export default function AddEntityModal({ isOpen, onClose, onSaveEntity }) {
                   type="text"
                   value={formData.tradeName}
                   onChange={(e) => setFormData({ ...formData, tradeName: e.target.value })}
-                  placeholder="e.g. Sushanth Advisory"
+                  placeholder="e.g. Apex Advisory"
                   className="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-400 focus:outline-none font-medium"
                 />
               </div>
@@ -416,7 +416,7 @@ export default function AddEntityModal({ isOpen, onClose, onSaveEntity }) {
                     ...formData,
                     signatory: { ...formData.signatory, name: e.target.value }
                   })}
-                  placeholder="CA Sushanth Cherukuri"
+                  placeholder="Authorized Signatory Name"
                   className="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium focus:ring-1 focus:ring-slate-400 focus:outline-none"
                 />
               </div>
