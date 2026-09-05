@@ -3,17 +3,61 @@ import {
   Printer, 
   Share2, 
   X, 
-  ShieldCheck, 
   Download, 
   Check, 
   CreditCard, 
   QrCode,
-  Building2,
-  FileText,
   Edit3
 } from 'lucide-react';
 import { formatINR, numberToWordsIndian, GST_STATES } from '../../data/constants';
 import html2pdf from 'html2pdf.js';
+
+// Format date to DD-MM-YYYY (handles Excel serial dates, ISO strings, YYYY-MM-DD, etc.)
+export function formatDateDMY(val) {
+  if (!val || String(val).trim() === '') return '-';
+
+  // Excel serial number (e.g. 46261)
+  if (typeof val === 'number' || /^\d{5}$/.test(String(val).trim())) {
+    const serial = Number(val);
+    const dateObj = new Date((serial - 25569) * 86400 * 1000);
+    if (!isNaN(dateObj.getTime())) {
+      const d = String(dateObj.getUTCDate()).padStart(2, '0');
+      const m = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+      const y = dateObj.getUTCFullYear();
+      return `${d}-${m}-${y}`;
+    }
+  }
+
+  const str = String(val).trim();
+  
+  // DD/MM/YYYY or DD-MM-YYYY
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{4}$/.test(str)) {
+    const parts = str.split(/[/-]/);
+    const d = parts[0].padStart(2, '0');
+    const m = parts[1].padStart(2, '0');
+    const y = parts[2];
+    return `${d}-${m}-${y}`;
+  }
+
+  // YYYY-MM-DD or ISO
+  if (/^\d{4}[/-]\d{1,2}[/-]\d{1,2}/.test(str)) {
+    const parts = str.split(/[/-]/);
+    const y = parts[0];
+    const m = parts[1].padStart(2, '0');
+    const d = parts[2].slice(0, 2).padStart(2, '0');
+    return `${d}-${m}-${y}`;
+  }
+
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 1990) {
+    const d = String(parsed.getDate()).padStart(2, '0');
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const y = parsed.getFullYear();
+    return `${d}-${m}-${y}`;
+  }
+
+  return str;
+}
 
 export default function InvoicePreview({
   invoice,
@@ -29,82 +73,100 @@ export default function InvoicePreview({
 
   if (!invoice) return null;
 
-  // Safe fallback for entity so preview NEVER crashes
+  // Safe fallback for entity
   const safeEntity = entity || {
     name: invoice.entityName || 'Business Entity',
-    tradeName: invoice.entityTradeName || 'Consulting & Advisory Services',
-    tagline: 'Strategic Management & Advisory',
+    tradeName: invoice.entityTradeName || '',
+    tagline: '',
     gstin: invoice.entityGstin || '',
     pan: invoice.entityPan || '',
-    addressLine1: 'Corporate Office',
+    addressLine1: invoice.entityAddress || '',
     addressLine2: '',
-    pincode: '500081',
+    city: invoice.entityCity || '',
+    pincode: invoice.entityPinCode || '',
     stateCode: '36',
-    stateName: 'Telangana',
-    email: 'billing@firm.com',
-    phone: '+91 98765 43210',
-    website: 'www.firm.com',
-    bankName: 'HDFC Bank',
-    bankAccountNo: '50200012345678',
-    bankIfsc: 'HDFC0001234',
-    bankBranch: 'Main Branch',
-    upiId: 'billing@okhdfcbank',
+    stateName: invoice.entityState || 'Telangana',
+    email: invoice.entityEmail || '',
+    phone: invoice.entityPhone || invoice.entityMobile || '',
+    website: '',
+    bankName: '',
+    bankAccountNo: '',
+    bankIfsc: '',
+    bankBranch: '',
+    upiId: '',
     signatory: {
-      name: 'Authorized Signatory',
-      designation: 'Managing Partner'
+      name: invoice.signatoryName || 'Authorized Signatory',
+      designation: invoice.signatoryDesignation || 'Managing Partner'
     },
     termsAndConditions: [
       '1. Payment is due within 15 days from invoice date.',
-      '2. Please quote invoice reference in NEFT / RTGS narration.'
+      '2. TDS deducted, if any, under Section 194J/194C should be deposited with govt.',
+      '3. Please cite the invoice number in all NEFT / RTGS narration.'
     ]
   };
 
-  const supplierState = GST_STATES.find(s => s.code === safeEntity.stateCode) || { code: safeEntity.stateCode || '36', name: safeEntity.stateName || 'State' };
-  const posState = GST_STATES.find(s => s.code === invoice.placeOfSupplyStateCode) || { code: invoice.placeOfSupplyStateCode || '36', name: invoice.placeOfSupplyStateName || "State" };
+  const supplierState = GST_STATES.find(s => s.code === safeEntity.stateCode) || { 
+    code: safeEntity.stateCode || '36', 
+    name: safeEntity.stateName || 'State' 
+  };
+  const posState = GST_STATES.find(s => s.code === invoice.placeOfSupplyStateCode) || { 
+    code: invoice.placeOfSupplyStateCode || safeEntity.stateCode || '36', 
+    name: invoice.placeOfSupplyStateName || safeEntity.stateName || "State" 
+  };
 
   const isInterState = invoice.isInterState !== undefined 
     ? invoice.isInterState 
-    : (String(safeEntity.stateCode || '36') !== String(invoice.placeOfSupplyStateCode || '36'));
+    : (String(safeEntity.stateCode || '36') !== String(invoice.placeOfSupplyStateCode || safeEntity.stateCode || '36'));
 
   const rawItems = Array.isArray(invoice.items) && invoice.items.length > 0 ? invoice.items : [
     {
       id: 'item-1',
-      description: 'Professional Strategic & Management Advisory Consulting',
+      description: 'Professional Services',
       sacHsn: '998311',
       qty: 1,
-      unit: 'Project',
-      rate: invoice.taxableTotal || invoice.grandTotal || 50000,
+      unit: 'Unit',
+      rate: invoice.taxableTotal || invoice.grandTotal || 0,
       discountPercent: 0,
-      taxableAmount: invoice.taxableTotal || invoice.grandTotal || 50000,
-      gstRate: 18
+      taxableAmount: invoice.taxableTotal || invoice.grandTotal || 0,
+      gstRate: 0
     }
   ];
 
-  // Calculate items with full fallback safety
+  // Calculate items with strict GST rate handling (0% GST -> 0 tax)
   const safeItems = rawItems.map((item, idx) => {
-    const qty = parseFloat(item.qty) || 1;
+    const qty = parseFloat(item.qty || item.quantity) || 1;
     const rate = parseFloat(item.rate) || 0;
-    const discountPct = parseFloat(item.discountPercent) || 0;
-    const gstRate = parseFloat(item.gstRate) || 0;
-    const taxableAmount = item.taxableAmount !== undefined ? parseFloat(item.taxableAmount) : (qty * rate * (1 - discountPct / 100));
+    const discountPct = parseFloat(item.discountPercent || item.discount) || 0;
+    
+    // Check if GST is charged or 0%
+    const rawRate = item.gstRate !== undefined ? item.gstRate : (item.taxRate !== undefined ? item.taxRate : 0);
+    const gstRate = parseFloat(rawRate) || 0;
+    const taxableAmount = item.taxableAmount !== undefined 
+      ? parseFloat(item.taxableAmount) 
+      : (qty * rate * (1 - discountPct / 100));
 
-    let cgstAmount = item.cgstAmount !== undefined ? parseFloat(item.cgstAmount) : 0;
-    let sgstAmount = item.sgstAmount !== undefined ? parseFloat(item.sgstAmount) : 0;
-    let igstAmount = item.igstAmount !== undefined ? parseFloat(item.igstAmount) : 0;
+    let cgstAmount = 0;
+    let sgstAmount = 0;
+    let igstAmount = 0;
 
-    if (!invoice.isReverseCharge) {
+    // Only compute GST if rate > 0 and not reverse charge
+    if (gstRate > 0 && !invoice.isReverseCharge && safeEntity.gstin) {
       if (isInterState) {
-        if (item.igstAmount === undefined) igstAmount = taxableAmount * (gstRate / 100);
+        igstAmount = item.igstAmount !== undefined 
+          ? parseFloat(item.igstAmount) 
+          : Math.round(taxableAmount * (gstRate / 100) * 100) / 100;
       } else {
-        if (item.cgstAmount === undefined) {
-          cgstAmount = taxableAmount * (gstRate / 200);
-          sgstAmount = taxableAmount * (gstRate / 200);
-        }
+        cgstAmount = item.cgstAmount !== undefined 
+          ? parseFloat(item.cgstAmount) 
+          : Math.round(taxableAmount * (gstRate / 200) * 100) / 100;
+        sgstAmount = item.sgstAmount !== undefined 
+          ? parseFloat(item.sgstAmount) 
+          : Math.round(taxableAmount * (gstRate / 200) * 100) / 100;
       }
     }
 
-    const totalTax = item.totalTax !== undefined ? parseFloat(item.totalTax) : (cgstAmount + sgstAmount + igstAmount);
-    const lineTotal = item.lineTotal !== undefined ? parseFloat(item.lineTotal) : (taxableAmount + totalTax);
+    const totalTax = cgstAmount + sgstAmount + igstAmount;
+    const lineTotal = taxableAmount + totalTax;
 
     return {
       ...item,
@@ -112,6 +174,8 @@ export default function InvoicePreview({
       rate,
       discountPercent: discountPct,
       gstRate,
+      taxRate: gstRate,
+      sacHsn: item.sacHsn || item.sacCode || item.hsnCode || '-',
       taxableAmount,
       cgstAmount,
       sgstAmount,
@@ -121,38 +185,26 @@ export default function InvoicePreview({
     };
   });
 
-  const taxableTotal = invoice.taxableTotal !== undefined 
-    ? parseFloat(invoice.taxableTotal) 
-    : safeItems.reduce((sum, it) => sum + it.taxableAmount, 0);
-
-  const totalCgst = invoice.totalCgst !== undefined 
-    ? parseFloat(invoice.totalCgst) 
-    : (invoice.cgstAmount !== undefined ? parseFloat(invoice.cgstAmount) : safeItems.reduce((s, it) => s + it.cgstAmount, 0));
-
-  const totalSgst = invoice.totalSgst !== undefined 
-    ? parseFloat(invoice.totalSgst) 
-    : (invoice.sgstAmount !== undefined ? parseFloat(invoice.sgstAmount) : safeItems.reduce((s, it) => s + it.sgstAmount, 0));
-
-  const totalIgst = invoice.totalIgst !== undefined 
-    ? parseFloat(invoice.totalIgst) 
-    : (invoice.igstAmount !== undefined ? parseFloat(invoice.igstAmount) : safeItems.reduce((s, it) => s + it.igstAmount, 0));
-
-  const grandTotal = invoice.grandTotal !== undefined 
-    ? parseFloat(invoice.grandTotal) 
-    : Math.round(taxableTotal + totalCgst + totalSgst + totalIgst);
-
+  const taxableTotal = safeItems.reduce((sum, it) => sum + it.taxableAmount, 0);
+  const totalCgst = safeItems.reduce((s, it) => s + it.cgstAmount, 0);
+  const totalSgst = safeItems.reduce((s, it) => s + it.sgstAmount, 0);
+  const totalIgst = safeItems.reduce((s, it) => s + it.igstAmount, 0);
+  const grandTotal = Math.round((taxableTotal + totalCgst + totalSgst + totalIgst) * 100) / 100;
   const amountInWords = numberToWordsIndian(grandTotal);
 
   // Bank & UPI resolution
-  const bankName = safeEntity.bankName || safeEntity.bankDetails?.bankName || 'HDFC Bank';
-  const bankAccountNo = safeEntity.bankAccountNo || safeEntity.bankDetails?.accountNumber || '50200012345678';
-  const bankIfsc = safeEntity.bankIfsc || safeEntity.bankDetails?.ifscCode || 'HDFC0001234';
-  const bankBranch = safeEntity.bankBranch || safeEntity.bankDetails?.branch || 'Main Branch';
-  const upiId = safeEntity.upiId || safeEntity.bankDetails?.upiId || 'billing@okhdfcbank';
+  const bankName = safeEntity.bankName || safeEntity.bankDetails?.bankName || '';
+  const bankAccountNo = safeEntity.bankAccountNo || safeEntity.bankDetails?.accountNumber || '';
+  const bankIfsc = safeEntity.bankIfsc || safeEntity.bankDetails?.ifscCode || '';
+  const bankBranch = safeEntity.bankBranch || safeEntity.bankDetails?.branch || '';
+  
+  // UPI ID: Only consider present if explicitly set by user (no fake fallback)
+  const upiId = (safeEntity.upiId || safeEntity.bankDetails?.upiId || invoice.entityUpiId || '').trim();
+  const hasUpi = upiId.length > 0 && upiId.includes('@');
+  const hasBankDetails = !!(bankName || bankAccountNo || bankIfsc);
 
-  // Dynamic UPI Payment QR URL
-  const upiPayString = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(safeEntity.name)}&am=${grandTotal}&cu=INR&tn=${encodeURIComponent(`Invoice ${invoice.invoiceNumber || 'INV'}`)}`;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(upiPayString)}&margin=4`;
+  const upiPayString = hasUpi ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(safeEntity.name)}&am=${grandTotal}&cu=INR&tn=${encodeURIComponent(`Invoice ${invoice.invoiceNumber || 'INV'}`)}` : '';
+  const qrCodeUrl = hasUpi ? `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(upiPayString)}&margin=4` : '';
 
   // Download PDF with Pure White Exact Fidelity matching the online view
   const handleDownloadPdf = async () => {
@@ -281,19 +333,19 @@ export default function InvoicePreview({
         <div 
           ref={invoiceSheetRef}
           id="invoice-printable-area"
-          className="invoice-printable-sheet bg-white p-8 sm:p-10 text-slate-900 font-sans space-y-6 text-xs leading-relaxed"
+          className="invoice-printable-sheet bg-white p-8 sm:p-10 text-slate-900 font-sans space-y-5 text-xs leading-relaxed"
           style={{ width: '100%', boxSizing: 'border-box', backgroundColor: '#ffffff' }}
         >
           {/* Header Top Section: Supplier Identity & Document Box */}
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 border-b-2 border-slate-800 pb-5 bg-white">
-            {/* Supplier Logo & Identity */}
-            <div className="space-y-1.5 max-w-md">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 border-b-2 border-slate-900 pb-5 bg-white">
+            {/* Supplier Logo, Name, Full Address & Contact Details */}
+            <div className="space-y-1 max-w-md text-left">
               <div className="flex items-center gap-3">
                 {(safeEntity.logoUrl || invoice.entityLogoUrl) ? (
                   <img 
                     src={safeEntity.logoUrl || invoice.entityLogoUrl} 
                     alt={safeEntity.name} 
-                    className="max-h-16 max-w-[150px] object-contain flex-shrink-0"
+                    className="max-h-14 max-w-[140px] object-contain flex-shrink-0"
                   />
                 ) : (
                   <div 
@@ -306,12 +358,22 @@ export default function InvoicePreview({
                   <h1 className="text-base font-bold text-slate-900 tracking-tight leading-tight uppercase">
                     {safeEntity.name}
                   </h1>
-                  <p className="text-xs text-slate-600 font-medium">{safeEntity.tagline || safeEntity.tradeName}</p>
+                  {(safeEntity.tagline || safeEntity.tradeName) && (
+                    <p className="text-xs text-slate-600 font-medium">{safeEntity.tagline || safeEntity.tradeName}</p>
+                  )}
                 </div>
               </div>
 
-              <div className="text-[11px] text-slate-600 space-y-0.5 pt-1">
-                <p>{safeEntity.addressLine1}{safeEntity.addressLine2 ? `, ${safeEntity.addressLine2}` : ''}{safeEntity.pincode ? ` - ${safeEntity.pincode}` : ''}</p>
+              {/* Issuing Entity Complete Address, State & GSTIN */}
+              <div className="text-[11px] text-slate-600 space-y-0.5 pt-1.5">
+                {(safeEntity.addressLine1 || safeEntity.address) && (
+                  <p className="leading-tight text-slate-700">
+                    {safeEntity.addressLine1 || safeEntity.address}
+                    {safeEntity.addressLine2 ? `, ${safeEntity.addressLine2}` : ''}
+                    {safeEntity.city ? `, ${safeEntity.city}` : ''}
+                    {safeEntity.pincode ? ` - ${safeEntity.pincode}` : ''}
+                  </p>
+                )}
                 <p>
                   <span className="font-semibold text-slate-900">State:</span> {supplierState.name} (State Code: <span className="font-mono font-bold text-slate-900">{supplierState.code}</span>)
                 </p>
@@ -324,46 +386,52 @@ export default function InvoicePreview({
                   {safeEntity.pan && <span><strong>PAN:</strong> {safeEntity.pan}</span>}
                   {safeEntity.cinOrLlp && <span><strong>CIN/LLP:</strong> {safeEntity.cinOrLlp}</span>}
                 </div>
-                <div className="flex flex-wrap gap-x-4 text-[10px] text-slate-500 pt-0.5 font-sans">
-                  {safeEntity.email && <span>Email: {safeEntity.email}</span>}
-                  {safeEntity.phone && <span>Phone: {safeEntity.phone}</span>}
-                  {safeEntity.website && <span>Web: {safeEntity.website}</span>}
+                {/* Mobile No. & Email ID of Issuing Entity */}
+                <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-700 pt-1 font-sans">
+                  {(safeEntity.phone || safeEntity.mobile) && (
+                    <span><strong>Mobile:</strong> {safeEntity.phone || safeEntity.mobile}</span>
+                  )}
+                  {safeEntity.email && (
+                    <span><strong>Email:</strong> {safeEntity.email}</span>
+                  )}
+                  {safeEntity.website && (
+                    <span><strong>Web:</strong> {safeEntity.website}</span>
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Document Title & Invoice Meta Box */}
-            <div className="text-left sm:text-right space-y-1.5 flex-shrink-0">
+            <div className="text-left sm:text-right space-y-2 flex-shrink-0">
               <div className="flex sm:justify-end">
                 <span 
-                  className="bg-slate-900 text-white font-bold text-xs tracking-wider uppercase px-3.5 py-1.5 rounded-md inline-flex items-center justify-center text-center leading-normal shadow-xs"
+                  className="bg-slate-900 text-white font-bold text-xs tracking-wider uppercase px-4 py-1.5 rounded-md inline-flex items-center justify-center text-center shadow-2xs"
                 >
                   TAX INVOICE
                 </span>
               </div>
-              <p className="text-[9px] text-slate-500 font-semibold tracking-tight">(Section 31 CGST Act & Rule 46 Compliant)</p>
 
-              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-left space-y-1 font-mono text-[11px] min-w-[210px]">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-left space-y-1 font-mono text-[11px] min-w-[210px]">
                 <div className="flex justify-between gap-4">
-                  <span className="text-slate-500">Invoice No:</span>
+                  <span className="text-slate-500 font-sans">Invoice No:</span>
                   <span className="font-bold text-slate-900">{invoice.invoiceNumber || 'INV/24-25/101'}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-slate-500">Invoice Date:</span>
-                  <span className="font-semibold text-slate-800">{invoice.invoiceDate}</span>
+                  <span className="text-slate-500 font-sans">Invoice Date:</span>
+                  <span className="font-semibold text-slate-800">{formatDateDMY(invoice.invoiceDate)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-slate-500">Due Date:</span>
-                  <span className="font-semibold text-slate-800">{invoice.dueDate}</span>
+                  <span className="text-slate-500 font-sans">Due Date:</span>
+                  <span className="font-semibold text-slate-800">{formatDateDMY(invoice.dueDate)}</span>
                 </div>
                 {invoice.poNumber && (
                   <div className="flex justify-between gap-4">
-                    <span className="text-slate-500">PO / Ref No:</span>
+                    <span className="text-slate-500 font-sans">PO / Ref No:</span>
                     <span className="font-semibold text-slate-800">{invoice.poNumber}</span>
                   </div>
                 )}
                 <div className="flex justify-between gap-4 pt-1 border-t border-slate-200 text-[10px]">
-                  <span className="text-slate-500">Reverse Charge:</span>
+                  <span className="text-slate-500 font-sans">Reverse Charge:</span>
                   <span className={`font-bold ${invoice.isReverseCharge ? 'text-rose-600' : 'text-slate-800'}`}>
                     {invoice.isReverseCharge ? 'YES (Applicable)' : 'NO'}
                   </span>
@@ -373,9 +441,9 @@ export default function InvoicePreview({
           </div>
 
           {/* Section 2: Bill To (Customer Details) & Place of Supply */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
             {/* Recipient Bill To */}
-            <div className="space-y-1">
+            <div className="space-y-1 text-left">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">
                 Details of Receiver / Billed To:
               </span>
@@ -391,21 +459,15 @@ export default function InvoicePreview({
               </div>
             </div>
 
-            {/* Place of Supply & Consignee */}
-            <div className="space-y-1 sm:border-l sm:border-slate-200 sm:pl-4">
+            {/* Place of Supply */}
+            <div className="space-y-1 text-left sm:border-l sm:border-slate-200 sm:pl-4">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">
                 Place of Supply & Delivery Details:
               </span>
-              <div className="text-[11px] text-slate-800 space-y-1 pt-0.5">
+              <div className="text-[11px] text-slate-800 space-y-1.5 pt-0.5">
                 <div>
                   <span className="text-slate-500">Place of Supply (POS):</span>{' '}
                   <strong className="font-semibold text-slate-900">{posState.name} ({posState.code})</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500">Tax Type:</span>{' '}
-                  <span className="font-bold font-mono px-2 py-0.5 bg-white rounded border border-slate-200 text-slate-900 inline-block leading-normal">
-                    {isInterState ? 'INTER-STATE (IGST)' : 'INTRA-STATE (CGST + SGST)'}
-                  </span>
                 </div>
                 {invoice.deliveryAddress && invoice.deliveryAddress !== invoice.clientAddress && (
                   <div className="pt-1 text-[10px] text-slate-600">
@@ -417,7 +479,7 @@ export default function InvoicePreview({
           </div>
 
           {/* Section 3: Itemized Table */}
-          <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-xs bg-white">
+          <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-2xs bg-white">
             <table className="w-full text-left text-[11px] min-w-[650px]">
               <thead className="bg-slate-100 text-slate-800 font-bold uppercase text-[10px] border-b border-slate-200">
                 <tr>
@@ -457,43 +519,43 @@ export default function InvoicePreview({
           </div>
 
           {/* Section 4: Totals Summary & Tax Breakdown Table */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 bg-white">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-1 bg-white">
             {/* Left: GST Tax Analysis Breakup */}
-            <div className="space-y-2">
+            <div className="space-y-2 text-left">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 block">
                 GST Tax Computation Summary:
               </span>
-              <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
+              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
                 <table className="w-full text-left text-[10px]">
                   <thead className="bg-slate-50 text-slate-800 font-bold uppercase border-b border-slate-200">
                     <tr>
-                      <th className="py-1.5 px-2 font-mono">SAC</th>
-                      <th className="py-1.5 px-2 text-right">Taxable</th>
+                      <th className="py-1.5 px-2.5 font-mono">SAC</th>
+                      <th className="py-1.5 px-2.5 text-right">Taxable</th>
                       {!isInterState ? (
                         <>
-                          <th className="py-1.5 px-2 text-right">CGST</th>
-                          <th className="py-1.5 px-2 text-right">SGST</th>
+                          <th className="py-1.5 px-2.5 text-right">CGST</th>
+                          <th className="py-1.5 px-2.5 text-right">SGST</th>
                         </>
                       ) : (
-                        <th className="py-1.5 px-2 text-right">IGST</th>
+                        <th className="py-1.5 px-2.5 text-right">IGST</th>
                       )}
-                      <th className="py-1.5 px-2 text-right">Total Tax</th>
+                      <th className="py-1.5 px-2.5 text-right">Total Tax</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono text-slate-700 bg-white">
                     {safeItems.map((item, idx) => (
                       <tr key={idx}>
-                        <td className="py-1 px-2">{item.sacHsn || '-'}</td>
-                        <td className="py-1 px-2 text-right">{formatINR(item.taxableAmount || 0)}</td>
+                        <td className="py-1.5 px-2.5">{item.sacHsn || '-'}</td>
+                        <td className="py-1.5 px-2.5 text-right">{formatINR(item.taxableAmount || 0)}</td>
                         {!isInterState ? (
                           <>
-                            <td className="py-1 px-2 text-right">{formatINR(item.cgstAmount || 0)}</td>
-                            <td className="py-1 px-2 text-right">{formatINR(item.sgstAmount || 0)}</td>
+                            <td className="py-1.5 px-2.5 text-right">{formatINR(item.cgstAmount || 0)}</td>
+                            <td className="py-1.5 px-2.5 text-right">{formatINR(item.sgstAmount || 0)}</td>
                           </>
                         ) : (
-                          <td className="py-1 px-2 text-right">{formatINR(item.igstAmount || 0)}</td>
+                          <td className="py-1.5 px-2.5 text-right">{formatINR(item.igstAmount || 0)}</td>
                         )}
-                        <td className="py-1 px-2 text-right font-bold text-slate-900">{formatINR(item.totalTax || 0)}</td>
+                        <td className="py-1.5 px-2.5 text-right font-bold text-slate-900">{formatINR(item.totalTax || 0)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -501,7 +563,7 @@ export default function InvoicePreview({
               </div>
 
               {/* Amount in Words */}
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-[11px] leading-tight">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] leading-tight">
                 <span className="font-bold text-slate-700 block text-[9px] uppercase tracking-wider">Total Amount in Words:</span>
                 <span className="font-semibold text-slate-900">{amountInWords}</span>
               </div>
@@ -509,39 +571,39 @@ export default function InvoicePreview({
 
             {/* Right: Calculations Subtotal & Grand Total */}
             <div className="space-y-2">
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1.5 font-mono text-xs">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1.5 font-mono text-xs">
                 <div className="flex justify-between text-slate-700">
-                  <span>Total Taxable Value:</span>
+                  <span className="font-sans">Total Taxable Value:</span>
                   <span className="font-bold text-slate-900">{formatINR(taxableTotal)}</span>
                 </div>
 
                 {!isInterState ? (
                   <>
                     <div className="flex justify-between text-slate-600">
-                      <span>Central Tax (CGST):</span>
+                      <span className="font-sans">Central Tax (CGST):</span>
                       <span className="font-semibold text-slate-900">{formatINR(totalCgst)}</span>
                     </div>
                     <div className="flex justify-between text-slate-600">
-                      <span>State Tax (SGST):</span>
+                      <span className="font-sans">State Tax (SGST):</span>
                       <span className="font-semibold text-slate-900">{formatINR(totalSgst)}</span>
                     </div>
                   </>
                 ) : (
                   <div className="flex justify-between text-slate-600">
-                    <span>Integrated Tax (IGST):</span>
+                    <span className="font-sans">Integrated Tax (IGST):</span>
                     <span className="font-semibold text-slate-900">{formatINR(totalIgst)}</span>
                   </div>
                 )}
 
                 {invoice.roundOff !== undefined && invoice.roundOff !== null && Number(invoice.roundOff) !== 0 && (
                   <div className="flex justify-between text-slate-500 text-[10px]">
-                    <span>Round Off:</span>
+                    <span className="font-sans">Round Off:</span>
                     <span>{Number(invoice.roundOff) > 0 ? `+${Number(invoice.roundOff).toFixed(2)}` : Number(invoice.roundOff).toFixed(2)}</span>
                   </div>
                 )}
 
                 {/* Grand Total Box (Pure White & Slate) */}
-                <div className="flex justify-between items-center pt-2.5 border-t-2 border-slate-800 text-sm font-sans">
+                <div className="flex justify-between items-center pt-2.5 border-t-2 border-slate-900 text-sm font-sans">
                   <span className="font-extrabold uppercase tracking-wider text-slate-950">Grand Total:</span>
                   <span className="font-black text-slate-950 text-base font-mono">{formatINR(grandTotal)}</span>
                 </div>
@@ -557,50 +619,64 @@ export default function InvoicePreview({
             </div>
           </div>
 
-          {/* Section 5: Bank Details, UPI QR & Signatory */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t-2 border-slate-800 bg-white">
+          {/* Section 5: Bank Details, UPI QR (Only if configured) & Signatory */}
+          <div className={`grid grid-cols-1 ${hasUpi && hasBankDetails ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4 pt-3 border-t-2 border-slate-900 bg-white`}>
             {/* Bank Details for NEFT/RTGS */}
-            <div className="space-y-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                <CreditCard size={12} />
-                <span>Bank Payment Details</span>
-              </span>
-              <div className="p-2.5 bg-slate-50 rounded-2xl border border-slate-200 font-mono text-[10px] space-y-0.5 leading-tight">
-                <div><strong>Bank:</strong> {bankName}</div>
-                <div><strong>A/C Name:</strong> {safeEntity.name}</div>
-                <div><strong>A/C No:</strong> <span className="font-bold text-slate-900">{bankAccountNo}</span></div>
-                <div><strong>IFSC:</strong> <span className="font-bold text-slate-900">{bankIfsc}</span></div>
-                {bankBranch && <div><strong>Branch:</strong> {bankBranch}</div>}
+            {hasBankDetails ? (
+              <div className="space-y-1 text-left">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                  <CreditCard size={12} />
+                  <span>Bank Payment Details</span>
+                </span>
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 font-mono text-[10px] space-y-0.5 leading-tight">
+                  {bankName && <div><strong>Bank:</strong> {bankName}</div>}
+                  <div><strong>A/C Name:</strong> {safeEntity.name}</div>
+                  {bankAccountNo && <div><strong>A/C No:</strong> <span className="font-bold text-slate-900">{bankAccountNo}</span></div>}
+                  {bankIfsc && <div><strong>IFSC:</strong> <span className="font-bold text-slate-900">{bankIfsc}</span></div>}
+                  {bankBranch && <div><strong>Branch:</strong> {bankBranch}</div>}
+                </div>
               </div>
-            </div>
-
-            {/* UPI QR Code */}
-            <div className="space-y-1 text-center flex flex-col items-center justify-center">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                <QrCode size={12} />
-                <span>Scan & Pay via UPI</span>
-              </span>
-              <div className="p-1 bg-white border border-slate-200 rounded-2xl shadow-xs inline-block">
-                <img 
-                  src={qrCodeUrl} 
-                  alt="UPI Payment QR Code" 
-                  className="w-20 h-20 object-contain rounded-xl"
-                />
+            ) : (
+              <div className="text-left text-slate-400 text-[11px] italic">
+                Bank payment details not specified.
               </div>
-              <span className="text-[9px] font-mono text-slate-500">{upiId}</span>
-            </div>
+            )}
 
-            {/* Authorized Signatory */}
+            {/* UPI QR Code - ONLY displayed if UPI ID is explicitly configured */}
+            {hasUpi && (
+              <div className="space-y-1 text-center flex flex-col items-center justify-center">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                  <QrCode size={12} />
+                  <span>Scan & Pay via UPI</span>
+                </span>
+                <div className="p-1.5 bg-white border border-slate-200 rounded-xl shadow-2xs inline-block">
+                  <img 
+                    src={qrCodeUrl} 
+                    alt="UPI Payment QR Code" 
+                    className="w-20 h-20 object-contain rounded-lg"
+                  />
+                </div>
+                <span className="text-[9px] font-mono text-slate-600 font-medium">{upiId}</span>
+              </div>
+            )}
+
+            {/* Authorized Signatory (Digitally Signed Badge Removed) */}
             <div className="space-y-1 text-right flex flex-col justify-between">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 block">
                 For {safeEntity.name}
               </span>
 
-              <div className="py-2">
-                <div className="inline-block p-1.5 border border-dashed border-emerald-600 rounded-xl bg-emerald-50 text-[9px] font-mono text-emerald-800 text-center">
-                  <div className="font-bold">DIGITALLY SIGNED</div>
-                  <div className="text-[8px] text-emerald-600">Authorized Representative</div>
-                </div>
+              {/* Clean signature area */}
+              <div className="py-2 min-h-[44px] flex items-end justify-end">
+                {(safeEntity.signatureUrl || invoice.signatureUrl) ? (
+                  <img 
+                    src={safeEntity.signatureUrl || invoice.signatureUrl} 
+                    alt="Signature" 
+                    className="max-h-12 object-contain"
+                  />
+                ) : (
+                  <div className="h-8"></div>
+                )}
               </div>
 
               <div>
@@ -611,16 +687,16 @@ export default function InvoicePreview({
           </div>
 
           {/* Section 6: Terms & Conditions and Notes */}
-          <div className="pt-2 border-t border-slate-200 text-[10px] text-slate-600 space-y-1 bg-white">
+          <div className="pt-2 border-t border-slate-200 text-[10px] text-slate-600 space-y-1 bg-white text-left">
             <div className="flex flex-col sm:flex-row justify-between gap-4">
               <div className="space-y-0.5 max-w-lg">
                 <span className="font-bold text-slate-900 uppercase">Terms & Conditions:</span>
-                <p className="whitespace-pre-line leading-normal">{invoice.terms || safeEntity.termsAndConditions?.join('\n') || 'Payment due within 15 days.'}</p>
+                <p className="whitespace-pre-line leading-normal text-slate-600">{invoice.terms || safeEntity.termsAndConditions?.join('\n') || 'Payment due within 15 days.'}</p>
               </div>
               {invoice.notes && (
                 <div className="space-y-0.5 sm:text-right max-w-xs">
                   <span className="font-bold text-slate-900 uppercase">Notes:</span>
-                  <p className="leading-normal">{invoice.notes}</p>
+                  <p className="leading-normal text-slate-600">{invoice.notes}</p>
                 </div>
               )}
             </div>

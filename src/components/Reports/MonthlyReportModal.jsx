@@ -16,6 +16,7 @@ import {
   ArrowDownToLine
 } from 'lucide-react';
 import { formatINR } from '../../data/constants';
+import { formatDateDMY } from '../Invoices/InvoicePreview';
 
 export default function MonthlyReportModal({ isOpen, onClose, invoices = [], entities = [], clients = [] }) {
   if (!isOpen) return null;
@@ -430,7 +431,7 @@ export default function MonthlyReportModal({ isOpen, onClose, invoices = [], ent
                       <tr key={inv.id} className="hover:bg-slate-50/80 transition">
                         <td className="p-2.5 whitespace-nowrap">
                           <div className="font-mono font-bold text-slate-900">{inv.invoiceNumber}</div>
-                          <div className="text-[10px] text-slate-400">{inv.invoiceDate}</div>
+                          <div className="text-[10px] text-slate-400">{formatDateDMY(inv.invoiceDate)}</div>
                         </td>
 
                         <td className="p-2.5 max-w-[140px] truncate">

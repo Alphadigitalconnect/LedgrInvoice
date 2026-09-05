@@ -9,7 +9,9 @@ import {
   Send,
   Smartphone,
   Sliders,
-  ExternalLink
+  Download,
+  FileText,
+  Paperclip
 } from 'lucide-react';
 import { 
   DEFAULT_WHATSAPP_TEMPLATE, 
@@ -17,14 +19,18 @@ import {
   DEFAULT_EMAIL_BODY_TEMPLATE, 
   renderTemplate 
 } from '../../utils/templateHelper';
+import html2pdf from 'html2pdf.js';
 
 export default function ShareModal({ invoice, entity, client, onClose, onNavigateToSettings }) {
   const [activeTab, setActiveTab] = useState('whatsapp');
   const [copied, setCopied] = useState(false);
   const [customPhone, setCustomPhone] = useState(client?.whatsapp || client?.phone || '');
   const [customEmail, setCustomEmail] = useState(client?.email || '');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [pdfDownloaded, setPdfDownloaded] = useState(false);
+  const [sharedSuccess, setSharedSuccess] = useState(false);
 
-  // Pre-rendered message content from entity templates
+  // Pre-rendered message content
   const initialWhatsappMsg = renderTemplate(
     entity?.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE,
     invoice,
@@ -49,7 +55,6 @@ export default function ShareModal({ invoice, entity, client, onClose, onNavigat
   const [whatsappMessage, setWhatsappMessage] = useState(initialWhatsappMsg);
   const [emailSubject, setEmailSubject] = useState(initialEmailSubject);
   const [emailBody, setEmailBody] = useState(initialEmailBody);
-  const [sharedSuccess, setSharedSuccess] = useState(false);
 
   useEffect(() => {
     setWhatsappMessage(renderTemplate(entity?.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE, invoice, entity, client));
@@ -69,56 +74,145 @@ export default function ShareModal({ invoice, entity, client, onClose, onNavigat
     setTimeout(() => setCopied(false), 2500);
   };
 
-  // Native Web Share API for Mobile devices
-  const handleNativeMobileShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Tax Invoice ${invoice.invoiceNumber}`,
-          text: activeTab === 'email' ? `${emailSubject}\n\n${emailBody}` : whatsappMessage,
-        });
-        setSharedSuccess(true);
-        setTimeout(() => setSharedSuccess(false), 3000);
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          handleCopyText(whatsappMessage);
+  // Helper to trigger invoice PDF download
+  const handleDownloadInvoicePdf = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      // Find printable area in DOM if available
+      const element = document.getElementById('invoice-printable-area');
+      const sanitizedNumber = (invoice.invoiceNumber || 'INV').replace(/[\/\\?%*:|"<>]/g, '_');
+      
+      if (element) {
+        const opt = {
+          margin: [5, 5, 5, 5],
+          filename: `${sanitizedNumber}_Tax_Invoice.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2.5, useCORS: true, backgroundColor: '#ffffff' },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        await html2pdf().set(opt).from(element).save();
+      } else {
+        window.print();
+      }
+      setPdfDownloaded(true);
+      setTimeout(() => setPdfDownloaded(false), 4000);
+    } catch (e) {
+      console.error('PDF error:', e);
+      window.print();
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  // Native Mobile / Browser Share with PDF File Attachment
+  const handleShareWithPdf = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      const sanitizedNumber = (invoice.invoiceNumber || 'INV').replace(/[\/\\?%*:|"<>]/g, '_');
+      const element = document.getElementById('invoice-printable-area');
+
+      if (element && navigator.share) {
+        const opt = {
+          margin: [5, 5, 5, 5],
+          filename: `${sanitizedNumber}_Tax_Invoice.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
+        const pdfFile = new File([pdfBlob], `${sanitizedNumber}_Tax_Invoice.pdf`, { type: 'application/pdf' });
+
+        if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+          await navigator.share({
+            title: `Tax Invoice ${invoice.invoiceNumber}`,
+            text: activeTab === 'email' ? `${emailSubject}\n\n${emailBody}` : whatsappMessage,
+            files: [pdfFile]
+          });
+          setSharedSuccess(true);
+          setTimeout(() => setSharedSuccess(false), 3000);
+          setIsGeneratingPdf(false);
+          return;
         }
       }
-    } else {
-      handleCopyText(whatsappMessage);
+
+      // Fallback: download PDF & trigger app URL
+      await handleDownloadInvoicePdf();
+      if (activeTab === 'whatsapp') {
+        window.open(whatsappUrl, '_blank');
+      } else {
+        window.location.href = mailtoUrl;
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        handleDownloadInvoicePdf();
+      }
+    } finally {
+      setIsGeneratingPdf(false);
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-xl w-full overflow-hidden border border-slate-200 animate-fadeIn">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-200 animate-fadeIn">
         {/* Header */}
-        <div className="bg-white px-4 sm:px-5 py-3.5 flex items-center justify-between border-b border-slate-200">
+        <div className="bg-white px-5 py-3.5 flex items-center justify-between border-b border-slate-200">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-2xs">
               <Share2 size={16} />
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">Share Invoice</h2>
+            <div className="text-left">
+              <h2 className="text-sm font-bold text-slate-900">Share Invoice & PDF Copy</h2>
               <p className="text-[11px] text-slate-500 font-mono">Invoice: {invoice.invoiceNumber}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md transition cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg transition cursor-pointer"
           >
             <X size={16} />
           </button>
         </div>
 
+        {/* PDF Attachment Notice Banner */}
+        <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3 text-left">
+          <div className="flex items-center gap-2 text-xs text-slate-800">
+            <FileText size={16} className="text-slate-600 flex-shrink-0" />
+            <div>
+              <span className="font-bold">Official Invoice PDF Copy</span>
+              <p className="text-[10px] text-slate-500">Ready to share or attach directly with your message</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadInvoicePdf}
+            disabled={isGeneratingPdf}
+            className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-semibold rounded-lg transition cursor-pointer shadow-2xs flex items-center gap-1.5 flex-shrink-0"
+          >
+            {isGeneratingPdf ? (
+              <div className="w-3 h-3 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
+            ) : pdfDownloaded ? (
+              <>
+                <Check size={13} className="text-emerald-700" />
+                <span className="text-emerald-700">PDF Saved</span>
+              </>
+            ) : (
+              <>
+                <Download size={13} />
+                <span>Save PDF Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+
         {/* Tab Switcher */}
-        <div className="flex border-b border-slate-200 bg-slate-50 p-1.5 gap-1.5">
+        <div className="flex border-b border-slate-200 bg-slate-100/70 p-1.5 gap-1.5">
           <button
             onClick={() => setActiveTab('whatsapp')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeTab === 'whatsapp'
                 ? 'bg-white text-slate-900 shadow-2xs border border-slate-200'
-                : 'text-slate-600 hover:bg-slate-100'
+                : 'text-slate-600 hover:bg-slate-200/60'
             }`}
           >
             <MessageSquare size={14} />
@@ -126,48 +220,35 @@ export default function ShareModal({ invoice, entity, client, onClose, onNavigat
           </button>
           <button
             onClick={() => setActiveTab('email')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeTab === 'email'
                 ? 'bg-white text-slate-900 shadow-2xs border border-slate-200'
-                : 'text-slate-600 hover:bg-slate-100'
+                : 'text-slate-600 hover:bg-slate-200/60'
             }`}
           >
             <Mail size={14} />
             <span>Email</span>
           </button>
-          {typeof navigator !== 'undefined' && !!navigator.share && (
-            <button
-              onClick={() => setActiveTab('native')}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeTab === 'native'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Smartphone size={14} />
-              <span>Mobile Share</span>
-            </button>
-          )}
         </div>
 
-        <div className="p-4 sm:p-5 space-y-3.5 text-xs bg-white">
+        <div className="p-4 sm:p-5 space-y-3.5 text-xs bg-white text-left">
           {/* WhatsApp / SMS Tab */}
           {activeTab === 'whatsapp' && (
             <div className="space-y-3">
               <div className="space-y-1">
-                <label className="font-medium text-slate-700 block">Recipient Phone Number (with country code)</label>
+                <label className="font-medium text-slate-700 block">Recipient Phone Number (with Country Code)</label>
                 <input
                   type="text"
                   value={customPhone}
                   onChange={(e) => setCustomPhone(e.target.value)}
-                  placeholder="919876543210"
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-slate-400 focus:outline-none"
+                  placeholder="e.g. 919876543210"
+                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-mono focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none"
                 />
               </div>
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="font-medium text-slate-700 block">Message Content (Pre-defined template)</label>
+                  <label className="font-medium text-slate-700 block">Message Content (Pre-filled with DD-MM-YYYY dates)</label>
                   {onNavigateToSettings && (
                     <button
                       type="button"
@@ -178,12 +259,12 @@ export default function ShareModal({ invoice, entity, client, onClose, onNavigat
                       className="text-[11px] text-slate-500 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
                     >
                       <Sliders size={11} />
-                      <span>Edit default template in Settings</span>
+                      <span>Edit template in Settings</span>
                     </button>
                   )}
                 </div>
                 <textarea
-                  rows={8}
+                  rows={7}
                   value={whatsappMessage}
                   onChange={(e) => setWhatsappMessage(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-mono text-[11px] text-slate-800 leading-relaxed focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none"
@@ -194,33 +275,22 @@ export default function ShareModal({ invoice, entity, client, onClose, onNavigat
                 <button
                   type="button"
                   onClick={() => handleCopyText(whatsappMessage)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold transition cursor-pointer"
                 >
                   {copied ? <Check size={14} className="text-emerald-700" /> : <Copy size={14} />}
                   <span>{copied ? 'Copied to Clipboard' : 'Copy Message'}</span>
                 </button>
 
                 <div className="flex items-center gap-2">
-                  {typeof navigator !== 'undefined' && !!navigator.share && (
-                    <button
-                      type="button"
-                      onClick={handleNativeMobileShare}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium transition cursor-pointer"
-                    >
-                      <Smartphone size={14} />
-                      <span>App Share</span>
-                    </button>
-                  )}
-
-                  <a
-                    href={whatsappUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-medium transition cursor-pointer shadow-2xs"
+                  <button
+                    type="button"
+                    onClick={handleShareWithPdf}
+                    disabled={isGeneratingPdf}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold transition cursor-pointer shadow-2xs disabled:opacity-50"
                   >
                     <Send size={13} />
-                    <span>Send via WhatsApp</span>
-                  </a>
+                    <span>Share PDF & Open WhatsApp</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -236,7 +306,7 @@ export default function ShareModal({ invoice, entity, client, onClose, onNavigat
                   value={customEmail}
                   onChange={(e) => setCustomEmail(e.target.value)}
                   placeholder="client@company.com"
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-400 focus:outline-none"
+                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none"
                 />
               </div>
 
@@ -246,13 +316,13 @@ export default function ShareModal({ invoice, entity, client, onClose, onNavigat
                   type="text"
                   value={emailSubject}
                   onChange={(e) => setEmailSubject(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-medium text-slate-900 focus:ring-1 focus:ring-slate-400 focus:outline-none"
+                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-medium text-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none"
                 />
               </div>
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="font-medium text-slate-700 block">Email Body</label>
+                  <label className="font-medium text-slate-700 block">Email Body Content</label>
                   {onNavigateToSettings && (
                     <button
                       type="button"
@@ -268,7 +338,7 @@ export default function ShareModal({ invoice, entity, client, onClose, onNavigat
                   )}
                 </div>
                 <textarea
-                  rows={8}
+                  rows={7}
                   value={emailBody}
                   onChange={(e) => setEmailBody(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-mono text-[11px] text-slate-800 leading-relaxed focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none"
@@ -279,44 +349,24 @@ export default function ShareModal({ invoice, entity, client, onClose, onNavigat
                 <button
                   type="button"
                   onClick={() => handleCopyText(`${emailSubject}\n\n${emailBody}`)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold transition cursor-pointer"
                 >
                   {copied ? <Check size={14} className="text-emerald-700" /> : <Copy size={14} />}
-                  <span>{copied ? 'Copied' : 'Copy Email Text'}</span>
+                  <span>{copied ? 'Copied' : 'Copy Email Body'}</span>
                 </button>
 
-                <a
-                  href={mailtoUrl}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-medium transition cursor-pointer shadow-2xs"
-                >
-                  <Mail size={13} />
-                  <span>Open Mail App</span>
-                </a>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleShareWithPdf}
+                    disabled={isGeneratingPdf}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold transition cursor-pointer shadow-2xs"
+                  >
+                    <Send size={13} />
+                    <span>Share PDF & Open Email</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Native Mobile Share Tab */}
-          {activeTab === 'native' && (
-            <div className="space-y-4 py-2 text-center">
-              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-700">
-                <Smartphone size={24} />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Direct Mobile Share Sheet</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Tap below to open your phone's native share drawer to share invoice summary directly via WhatsApp, Telegram, Gmail, SMS, or AirDrop.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleNativeMobileShare}
-                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-2xs"
-              >
-                <Share2 size={15} />
-                <span>Open Device Share Menu</span>
-              </button>
             </div>
           )}
         </div>

@@ -11,6 +11,7 @@ import {
   Edit3 
 } from 'lucide-react';
 import { formatINR } from '../../data/constants';
+import { formatDateDMY } from './InvoicePreview';
 
 export default function InvoiceList({
   invoices,
@@ -209,7 +210,7 @@ export default function InvoiceList({
                     <tr key={inv.id} className="hover:bg-slate-50/70 transition">
                       <td className="px-4 py-3">
                         <div className="font-mono font-medium text-slate-900">{inv.invoiceNumber}</div>
-                        <div className="text-[10px] text-slate-400">{inv.invoiceDate} (Due: {inv.dueDate})</div>
+                        <div className="text-[10px] text-slate-400">{formatDateDMY(inv.invoiceDate)} (Due: {formatDateDMY(inv.dueDate)})</div>
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-slate-700 font-medium">{ent?.tradeName || ent?.name || 'Entity'}</span>
