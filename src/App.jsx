@@ -17,8 +17,10 @@ import LedgrLogo from './components/common/LedgrLogo';
 import AuthScreen from './components/Auth/AuthScreen';
 import ProfileModal from './components/Auth/ProfileModal';
 
-// Reports
+// Reports & Imports
 import MonthlyReportModal from './components/Reports/MonthlyReportModal';
+import ImportClientsModal from './components/Clients/ImportClientsModal';
+import ImportInvoicesModal from './components/Invoices/ImportInvoicesModal';
 
 // Navigation & Layout
 import Sidebar from './components/Navigation/Sidebar';
@@ -114,6 +116,47 @@ export default function App() {
   const [isAddEntityModalOpen, setIsAddEntityModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isMonthlyReportOpen, setIsMonthlyReportOpen] = useState(false);
+  const [isImportClientsOpen, setIsImportClientsOpen] = useState(false);
+  const [isImportInvoicesOpen, setIsImportInvoicesOpen] = useState(false);
+
+  // Bulk Import Handlers
+  const handleImportClientsSuccess = (importedList) => {
+    importedList.forEach(client => {
+      StorageService.saveClient(client);
+    });
+    setClients(StorageService.getClients());
+  };
+
+  const handleImportInvoicesSuccess = (importedInvoices) => {
+    importedInvoices.forEach(inv => {
+      // Find or create client
+      let targetClient = clients.find(c => 
+        (c.businessName && c.businessName.toLowerCase() === inv.clientName.toLowerCase()) ||
+        (c.name && c.name.toLowerCase() === inv.clientName.toLowerCase()) ||
+        (c.gstin && inv.clientGstin && c.gstin.toUpperCase() === inv.clientGstin.toUpperCase())
+      );
+      if (!targetClient) {
+        const newCli = {
+          id: `client-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          businessName: inv.clientName,
+          name: inv.clientName,
+          gstin: inv.clientGstin || '',
+          stateName: inv.clientState || '',
+          createdAt: new Date().toISOString()
+        };
+        StorageService.saveClient(newCli);
+        targetClient = newCli;
+      }
+      const completeInvoice = {
+        ...inv,
+        clientId: targetClient.id || inv.clientId
+      };
+      StorageService.saveInvoice(completeInvoice);
+    });
+    setClients(StorageService.getClients());
+    setInvoices(StorageService.getInvoices());
+    setEntities(StorageService.getEntities());
+  };
 
   // Invoice creation initial props
   const [invoiceContext, setInvoiceContext] = useState({
@@ -122,7 +165,6 @@ export default function App() {
     engagementId: null,
     editingInvoice: null
   });
-
 
   // Handlers for Invoices
   const handleOpenCreateInvoice = (ctx = {}) => {
@@ -334,6 +376,7 @@ export default function App() {
             onDeleteInvoice={handleDeleteInvoice}
             onDuplicateInvoice={handleDuplicateInvoice}
             onOpenMonthlyReport={() => setIsMonthlyReportOpen(true)}
+            onOpenImportInvoices={() => setIsImportInvoicesOpen(true)}
           />
         )}
 
@@ -376,6 +419,7 @@ export default function App() {
             onDeleteClient={handleDeleteClient}
             onNavigateToEngagements={() => setActiveTab('engagements')}
             onCreateInvoiceForClient={(client) => handleOpenCreateInvoice({ clientId: client.id })}
+            onOpenImportClients={() => setIsImportClientsOpen(true)}
           />
         )}
 
@@ -456,6 +500,24 @@ export default function App() {
         invoices={invoices}
         entities={entities}
         clients={clients}
+      />
+
+      {/* Global Import Clients Modal */}
+      <ImportClientsModal
+        isOpen={isImportClientsOpen}
+        onClose={() => setIsImportClientsOpen(false)}
+        onImportSuccess={handleImportClientsSuccess}
+        existingClients={clients}
+      />
+
+      {/* Global Import Invoices Modal */}
+      <ImportInvoicesModal
+        isOpen={isImportInvoicesOpen}
+        onClose={() => setIsImportInvoicesOpen(false)}
+        onImportSuccess={handleImportInvoicesSuccess}
+        entities={entities}
+        clients={clients}
+        activeEntityId={activeEntityFilter}
       />
 
       {/* Global Invoice Preview Modal */}

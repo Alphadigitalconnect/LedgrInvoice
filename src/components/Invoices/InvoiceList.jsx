@@ -25,7 +25,8 @@ export default function InvoiceList({
   onRecordPayment,
   onDeleteInvoice,
   onDuplicateInvoice,
-  onOpenMonthlyReport
+  onOpenMonthlyReport,
+  onOpenImportInvoices
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -78,10 +79,20 @@ export default function InvoiceList({
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          {onOpenImportInvoices && (
+            <button
+              onClick={onOpenImportInvoices}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer shadow-2xs"
+              title="Import Invoices from Excel / CSV"
+            >
+              <span>Import Invoices</span>
+            </button>
+          )}
+
           {onOpenMonthlyReport && (
             <button
               onClick={onOpenMonthlyReport}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer shadow-2xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition cursor-pointer shadow-2xs"
               title="Export Monthly Invoices & GST Report"
             >
               <span>Export Monthly Report</span>

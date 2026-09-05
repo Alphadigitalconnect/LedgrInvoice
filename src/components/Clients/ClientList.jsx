@@ -23,7 +23,8 @@ export default function ClientList({
   onEditClient,
   onDeleteClient,
   onNavigateToEngagements,
-  onCreateInvoiceForClient
+  onCreateInvoiceForClient,
+  onOpenImportClients
 }) {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -32,6 +33,7 @@ export default function ClientList({
     const term = searchTerm.toLowerCase();
     return (
       c.name?.toLowerCase().includes(term) ||
+      c.businessName?.toLowerCase().includes(term) ||
       c.gstin?.toLowerCase().includes(term) ||
       c.contactPerson?.toLowerCase().includes(term) ||
       c.email?.toLowerCase().includes(term) ||
@@ -52,13 +54,25 @@ export default function ClientList({
           </p>
         </div>
 
-        <button
-          onClick={onOpenNewClient}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 text-white transition self-start sm:self-auto cursor-pointer shadow-2xs"
-        >
-          <UserPlus size={14} />
-          <span>Add Client</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {onOpenImportClients && (
+            <button
+              onClick={onOpenImportClients}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer shadow-2xs"
+              title="Import Clients from Excel / CSV"
+            >
+              <span>Import Clients</span>
+            </button>
+          )}
+
+          <button
+            onClick={onOpenNewClient}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition cursor-pointer shadow-2xs"
+          >
+            <UserPlus size={14} />
+            <span>Add Client</span>
+          </button>
+        </div>
       </div>
 
       {/* Search Bar */}
