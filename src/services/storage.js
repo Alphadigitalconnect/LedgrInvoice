@@ -1,11 +1,13 @@
 import { INITIAL_ENTITIES, INITIAL_CLIENTS, INITIAL_ENGAGEMENTS, INITIAL_INVOICES } from '../data/mockData';
+import { ApiService } from './api';
 
 const KEYS = {
   ENTITIES: 'invoicify_entities_v2',
   CLIENTS: 'invoicify_clients_v2',
   ENGAGEMENTS: 'invoicify_engagements_v2',
   INVOICES: 'invoicify_invoices_v2',
-  ACTIVE_ENTITY: 'invoicify_active_entity_id_v2'
+  ACTIVE_ENTITY: 'invoicify_active_entity_id_v2',
+  AUTH_USER: 'invoicify_auth_user'
 };
 
 // Safe JSON parser
@@ -25,6 +27,24 @@ function safeSet(key, value) {
   } catch (e) {
     console.error(`Error saving ${key} to localStorage:`, e);
   }
+}
+
+// Debounced auto-sync to Hostinger
+let syncTimeout = null;
+function triggerCloudSync(storageInstance) {
+  if (syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(() => {
+    const user = storageInstance.getAuthUser();
+    const userId = user?.id || 'default_workspace';
+    const payload = {
+      entities: storageInstance.getEntities(),
+      clients: storageInstance.getClients(),
+      engagements: storageInstance.getEngagements(),
+      invoices: storageInstance.getInvoices(),
+      activeEntityId: storageInstance.getActiveEntityFilter()
+    };
+    ApiService.syncToHostinger(payload, userId);
+  }, 400);
 }
 
 // Storage API
@@ -55,12 +75,39 @@ export const StorageService = {
     }
   },
 
+  // Auth User
+  getAuthUser() {
+    return safeGet(KEYS.AUTH_USER, null);
+  },
+  setAuthUser(user) {
+    safeSet(KEYS.AUTH_USER, user);
+  },
+  clearAuthUser() {
+    localStorage.removeItem(KEYS.AUTH_USER);
+  },
+
+  // Pull data from Hostinger cloud on sign-in
+  async loadFromHostinger(userId) {
+    if (!userId) return null;
+    const cloudData = await ApiService.fetchFromHostinger(userId);
+    if (cloudData) {
+      if (Array.isArray(cloudData.entities)) safeSet(KEYS.ENTITIES, cloudData.entities);
+      if (Array.isArray(cloudData.clients)) safeSet(KEYS.CLIENTS, cloudData.clients);
+      if (Array.isArray(cloudData.engagements)) safeSet(KEYS.ENGAGEMENTS, cloudData.engagements);
+      if (Array.isArray(cloudData.invoices)) safeSet(KEYS.INVOICES, cloudData.invoices);
+      if (cloudData.activeEntityId) safeSet(KEYS.ACTIVE_ENTITY, cloudData.activeEntityId);
+      return cloudData;
+    }
+    return null;
+  },
+
   // Active Entity Filter State
   getActiveEntityFilter() {
     return safeGet(KEYS.ACTIVE_ENTITY, "all");
   },
   setActiveEntityFilter(id) {
     safeSet(KEYS.ACTIVE_ENTITY, id);
+    triggerCloudSync(this);
   },
 
   // Entities
@@ -82,6 +129,7 @@ export const StorageService = {
       updated = [...list, { ...entity, id: entity.id || `entity-${Date.now()}` }];
     }
     safeSet(KEYS.ENTITIES, updated);
+    triggerCloudSync(this);
     return updated;
   },
 
@@ -95,6 +143,7 @@ export const StorageService = {
       return ent;
     });
     safeSet(KEYS.ENTITIES, updated);
+    triggerCloudSync(this);
     return updated;
   },
 
@@ -121,11 +170,13 @@ export const StorageService = {
       updated = [newClient, ...list];
     }
     safeSet(KEYS.CLIENTS, updated);
+    triggerCloudSync(this);
     return updated;
   },
   deleteClient(id) {
     const list = this.getClients().filter(c => c.id !== id);
     safeSet(KEYS.CLIENTS, list);
+    triggerCloudSync(this);
     return list;
   },
 
@@ -152,11 +203,13 @@ export const StorageService = {
       updated = [newEng, ...list];
     }
     safeSet(KEYS.ENGAGEMENTS, updated);
+    triggerCloudSync(this);
     return updated;
   },
   deleteEngagement(id) {
     const list = this.getEngagements().filter(e => e.id !== id);
     safeSet(KEYS.ENGAGEMENTS, list);
+    triggerCloudSync(this);
     return list;
   },
 
@@ -187,11 +240,13 @@ export const StorageService = {
       }
     }
     safeSet(KEYS.INVOICES, updated);
+    triggerCloudSync(this);
     return updated;
   },
   deleteInvoice(id) {
     const list = this.getInvoices().filter(inv => inv.id !== id);
     safeSet(KEYS.INVOICES, list);
+    triggerCloudSync(this);
     return list;
   },
 
@@ -202,6 +257,7 @@ export const StorageService = {
     safeSet(KEYS.ENGAGEMENTS, []);
     safeSet(KEYS.INVOICES, []);
     safeSet(KEYS.ACTIVE_ENTITY, "all");
+    triggerCloudSync(this);
     return true;
   },
 
@@ -226,9 +282,11 @@ export const StorageService = {
       if (parsed.clients) safeSet(KEYS.CLIENTS, parsed.clients);
       if (parsed.engagements) safeSet(KEYS.ENGAGEMENTS, parsed.engagements);
       if (parsed.invoices) safeSet(KEYS.INVOICES, parsed.invoices);
+      triggerCloudSync(this);
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };
     }
   }
 };
+

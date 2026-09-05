@@ -29,7 +29,8 @@ export default function Sidebar({
   onExportData,
   onOpenNewInvoice,
   onOpenAddEntity,
-  onLogout
+  onLogout,
+  authUser
 }) {
   const currentEntity = entities.find(e => e.id === activeEntityFilter);
 
@@ -50,6 +51,9 @@ export default function Sidebar({
     }
     if (onClose) onClose();
   };
+
+  const userDisplayName = authUser?.name || 'Account Owner';
+  const userContact = authUser?.email || authUser?.mobile || 'Signed In';
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-white text-slate-700 select-none">
@@ -75,7 +79,7 @@ export default function Sidebar({
         <div className="flex items-center gap-1">
           <button
             onClick={onLogout}
-            title="Lock Session / Logout"
+            title="Sign Out"
             className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
           >
             <LogOut size={16} />
@@ -92,8 +96,28 @@ export default function Sidebar({
         </div>
       </div>
 
+      {/* Signed In User Profile Info */}
+      <div className="px-3.5 py-2.5 bg-slate-50/90 border-b border-slate-200 flex items-center justify-between">
+        <div className="flex items-center gap-2 overflow-hidden">
+          <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+            {userDisplayName.charAt(0).toUpperCase()}
+          </div>
+          <div className="truncate text-left">
+            <div className="text-xs font-semibold text-slate-800 truncate leading-tight">
+              {userDisplayName}
+            </div>
+            <div className="text-[10px] text-slate-500 truncate leading-tight font-mono">
+              {userContact}
+            </div>
+          </div>
+        </div>
+        <span className="text-[9px] bg-emerald-50 text-emerald-700 font-semibold px-1.5 py-0.5 rounded border border-emerald-200 uppercase tracking-wider">
+          Live
+        </span>
+      </div>
+
       {/* Multi-Entity Switcher Widget */}
-      <div className="p-3 bg-slate-50/80 border-b border-slate-200">
+      <div className="p-3 bg-slate-50/50 border-b border-slate-200">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Active Entity</span>
           <button
@@ -214,14 +238,14 @@ export default function Sidebar({
           }}
           className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white transition cursor-pointer"
         >
-          <Lock size={13} className="text-slate-400" />
-          <span>Lock Admin Session</span>
+          <LogOut size={13} className="text-slate-400" />
+          <span>Sign Out</span>
         </button>
       </div>
 
       {/* Footer */}
       <div className="px-3 py-2 bg-white border-t border-slate-100 text-[10px] text-slate-400 font-medium">
-        <span>LEDGR Portal • v1.0</span>
+        <span>LEDGR Portal • Hostinger Cloud</span>
       </div>
     </div>
   );

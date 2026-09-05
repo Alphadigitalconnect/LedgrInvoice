@@ -14,7 +14,7 @@ import {
 import LedgrLogo from './components/common/LedgrLogo';
 
 // Auth
-import AdminLogin from './components/Auth/AdminLogin';
+import AuthScreen from './components/Auth/AuthScreen';
 
 // Navigation & Layout
 import Sidebar from './components/Navigation/Sidebar';
@@ -38,25 +38,42 @@ export default function App() {
     StorageService.initialize();
   }, []);
 
-  // Admin Authentication State (Password is 1234)
+  // Authentication State
+  const [authUser, setAuthUser] = useState(() => StorageService.getAuthUser());
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return localStorage.getItem('invoicify_admin_auth') === 'authenticated';
+    return localStorage.getItem('invoicify_admin_auth') === 'authenticated' && !!StorageService.getAuthUser();
   });
-
-  const handleLoginSuccess = () => {
-    setIsAuthenticated(true);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('invoicify_admin_auth');
-    setIsAuthenticated(false);
-  };
 
   // Application Data States
   const [entities, setEntities] = useState(() => StorageService.getEntities());
   const [clients, setClients] = useState(() => StorageService.getClients());
   const [engagements, setEngagements] = useState(() => StorageService.getEngagements());
   const [invoices, setInvoices] = useState(() => StorageService.getInvoices());
+
+  const handleLoginSuccess = async (user) => {
+    setAuthUser(user);
+    StorageService.setAuthUser(user);
+    setIsAuthenticated(true);
+
+    // Pull user's Hostinger cloud data if present
+    if (user && user.id) {
+      const cloudData = await StorageService.loadFromHostinger(user.id);
+      if (cloudData) {
+        setEntities(StorageService.getEntities());
+        setClients(StorageService.getClients());
+        setEngagements(StorageService.getEngagements());
+        setInvoices(StorageService.getInvoices());
+      }
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('invoicify_admin_auth');
+    StorageService.clearAuthUser();
+    setAuthUser(null);
+    setIsAuthenticated(false);
+  };
+
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -200,9 +217,9 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  // If not authenticated, render the Admin Login gate (Password: 1234)
+  // If not authenticated, render the Mobile/Email Auth Screen
   if (!isAuthenticated) {
-    return <AdminLogin onLoginSuccess={handleLoginSuccess} />;
+    return <AuthScreen onAuthSuccess={handleLoginSuccess} />;
   }
 
   const activeEntityObj = entities.find(e => e.id === activeEntityFilter);
@@ -257,6 +274,7 @@ export default function App() {
         onOpenNewInvoice={() => handleOpenCreateInvoice()}
         onOpenAddEntity={() => setIsAddEntityModalOpen(true)}
         onLogout={handleLogout}
+        authUser={authUser}
       />
 
       {/* Main Content Area */}
