@@ -333,9 +333,13 @@ export default function InvoicePreview({
             </div>
 
             {/* Document Title & Invoice Meta Box */}
-            <div className="text-left sm:text-right space-y-2 flex-shrink-0">
-              <div className="inline-block bg-slate-900 text-white px-4 py-1.5 rounded-xl text-xs font-black tracking-widest uppercase shadow-xs">
-                TAX INVOICE
+            <div className="text-left sm:text-right space-y-1.5 flex-shrink-0">
+              <div className="flex sm:justify-end">
+                <span 
+                  className="bg-slate-900 text-white font-bold text-xs tracking-wider uppercase px-3.5 py-1.5 rounded-md inline-flex items-center justify-center text-center leading-normal shadow-xs"
+                >
+                  TAX INVOICE
+                </span>
               </div>
               <p className="text-[9px] text-slate-500 font-semibold tracking-tight">(Section 31 CGST Act & Rule 46 Compliant)</p>
 
@@ -399,7 +403,7 @@ export default function InvoicePreview({
                 </div>
                 <div>
                   <span className="text-slate-500">Tax Type:</span>{' '}
-                  <span className="font-bold font-mono px-1.5 py-0.2 bg-white rounded border border-slate-200 text-slate-900">
+                  <span className="font-bold font-mono px-2 py-0.5 bg-white rounded border border-slate-200 text-slate-900 inline-block leading-normal">
                     {isInterState ? 'INTER-STATE (IGST)' : 'INTRA-STATE (CGST + SGST)'}
                   </span>
                 </div>
