@@ -86,18 +86,15 @@ export default function ProfileModal({ isOpen, onClose, authUser, onProfileUpdat
       return;
     }
 
-    if (!window.confirm('Are you absolutely sure? All your entities, invoices, clients, and cloud data will be permanently wiped.')) {
-      return;
-    }
-
     setIsLoading(true);
     const identifier = authUser.identifier || authUser.email || authUser.mobile || '';
     const res = await ApiService.deleteAccount(authUser.id, deletePassword, identifier);
     setIsLoading(false);
 
     if (res && res.success) {
-      alert('Your account and all associated cloud data have been permanently deleted.');
-      if (onAccountDeleted) onAccountDeleted();
+      if (onAccountDeleted) {
+        onAccountDeleted();
+      }
     } else {
       setError(res?.message || 'Could not delete account. Please verify your password.');
     }
