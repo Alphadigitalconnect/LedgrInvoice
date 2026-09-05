@@ -180,10 +180,15 @@ if ($action === 'login' || $action === 'register' || $action === 'send-otp') {
 
     // Deliver OTP
     $deliveryType = $isEmail ? 'email' : 'mobile';
-    $targetMask = $isEmail ? $identifier : (strlen($identifier) > 4 ? str_repeat('*', strlen($identifier) - 4) . substr($identifier, -4) : $identifier);
+    $targetMask = $isEmail ? $identifier : (strlen($cleanPhone) >= 10 ? '+91 ' . $cleanPhone : $identifier);
 
+    $whatsappUrl = '';
     if ($isEmail) {
         sendOTPEmail($identifier, $otp, $matchedUser['name'] ?? '');
+    } else if (!empty($cleanPhone)) {
+        // WhatsApp message dispatch URL
+        $waMsg = "Your LEDGR Portal Login Verification Code (OTP) is: *" . $otp . "*. This code is valid for 10 minutes. Please do not share it with anyone.";
+        $whatsappUrl = "https://api.whatsapp.com/send?phone=91" . $cleanPhone . "&text=" . urlencode($waMsg);
     }
 
     echo json_encode([
@@ -191,9 +196,9 @@ if ($action === 'login' || $action === 'register' || $action === 'send-otp') {
         'requires_otp' => true,
         'delivery_type' => $deliveryType,
         'target' => $targetMask,
-        'otp_hint' => $otp, // For accessibility & instant live preview
+        'whatsapp_url' => $whatsappUrl,
         'userId' => $matchedUser['id'],
-        'message' => 'Verification code (OTP) sent to your ' . ($isEmail ? 'email' : 'mobile number') . '.'
+        'message' => 'Verification code (OTP) sent to your ' . ($isEmail ? 'email ID.' : 'mobile number / WhatsApp.')
     ]);
     exit();
 }
@@ -308,15 +313,21 @@ if ($action === 'resend-otp') {
     saveUsers($usersFile, $users);
 
     $isEmail = strpos($matchedUser['identifier'], '@') !== false || !empty($matchedUser['email']);
+    $cleanPhone = preg_replace('/[^0-9]/', '', $matchedUser['mobile'] ?: $matchedUser['identifier']);
+    $whatsappUrl = '';
+
     if ($isEmail) {
         $emailAddr = $matchedUser['email'] ?: $matchedUser['identifier'];
         sendOTPEmail($emailAddr, $otp, $matchedUser['name'] ?? '');
+    } else if (!empty($cleanPhone)) {
+        $waMsg = "Your new LEDGR Portal Login Verification Code (OTP) is: *" . $otp . "*. This code is valid for 10 minutes. Please do not share it with anyone.";
+        $whatsappUrl = "https://api.whatsapp.com/send?phone=91" . $cleanPhone . "&text=" . urlencode($waMsg);
     }
 
     echo json_encode([
         'success' => true,
-        'otp_hint' => $otp,
-        'message' => 'A new 6-digit OTP has been sent to your ' . ($isEmail ? 'email' : 'mobile number') . '.'
+        'whatsapp_url' => $whatsappUrl,
+        'message' => 'A new 6-digit OTP has been sent to your ' . ($isEmail ? 'email ID.' : 'mobile number / WhatsApp.')
     ]);
     exit();
 }

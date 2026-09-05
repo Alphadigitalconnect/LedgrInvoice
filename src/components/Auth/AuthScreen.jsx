@@ -15,7 +15,9 @@ import {
   UserPlus,
   ArrowLeft,
   RotateCw,
-  Smartphone
+  Smartphone,
+  MessageCircle,
+  Inbox
 } from 'lucide-react';
 import LedgrLogo from '../common/LedgrLogo';
 import { ApiService } from '../../services/api';
@@ -37,7 +39,7 @@ export default function AuthScreen({ onAuthSuccess }) {
   const [otpDelivery, setOtpDelivery] = useState({
     delivery_type: 'mobile',
     target: '',
-    otp_hint: '',
+    whatsapp_url: '',
     userId: ''
   });
   const [resendTimer, setResendTimer] = useState(30);
@@ -123,7 +125,7 @@ export default function AuthScreen({ onAuthSuccess }) {
       setOtpDelivery({
         delivery_type: authRes.delivery_type || (cleanId.includes('@') ? 'email' : 'mobile'),
         target: authRes.target || cleanId,
-        otp_hint: authRes.otp_hint || '',
+        whatsapp_url: authRes.whatsapp_url || '',
         userId: authRes.userId || ''
       });
       setOtpDigits(['', '', '', '', '', '']);
@@ -205,8 +207,8 @@ export default function AuthScreen({ onAuthSuccess }) {
       localStorage.setItem('invoicify_admin_auth', 'authenticated');
       onAuthSuccess(verifyRes.user);
     } else {
-      // Fallback verification for demo/local session
-      if (enteredOtp === otpDelivery.otp_hint || enteredOtp === '123456') {
+      // Offline fallback verification
+      if (enteredOtp === '123456') {
         const fallbackUser = {
           id: otpDelivery.userId || 'usr_' + Date.now(),
           name: name.trim() || (cleanId.includes('@') ? cleanId.split('@')[0] : 'User ' + cleanId.slice(-4)),
@@ -219,7 +221,7 @@ export default function AuthScreen({ onAuthSuccess }) {
         localStorage.setItem('invoicify_admin_auth', 'authenticated');
         onAuthSuccess(fallbackUser);
       } else {
-        setError(verifyRes?.message || 'Invalid or expired OTP. Please try again.');
+        setError(verifyRes?.message || 'Invalid or expired OTP. Please verify the 6-digit code received on your Email/WhatsApp.');
       }
     }
   };
@@ -235,9 +237,9 @@ export default function AuthScreen({ onAuthSuccess }) {
 
     if (res && res.success) {
       setResendTimer(30);
-      setSuccessMsg('A new OTP has been sent successfully.');
-      if (res.otp_hint) {
-        setOtpDelivery(prev => ({ ...prev, otp_hint: res.otp_hint }));
+      setSuccessMsg(res.message || 'A new 6-digit OTP has been dispatched to your Email / WhatsApp.');
+      if (res.whatsapp_url) {
+        setOtpDelivery(prev => ({ ...prev, whatsapp_url: res.whatsapp_url }));
       }
       setTimeout(() => setSuccessMsg(''), 4000);
     } else {
@@ -500,48 +502,45 @@ export default function AuthScreen({ onAuthSuccess }) {
         {/* STEP 2: 6-DIGIT OTP VERIFICATION SCREEN */}
         {step === 'otp' && (
           <div className="space-y-4 animate-fadeIn">
-            {/* Header Badge */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-left space-y-1.5">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center flex-shrink-0">
-                  {otpDelivery.delivery_type === 'email' ? <Mail size={15} /> : <Smartphone size={15} />}
+            {/* Delivery Notice Card */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-left space-y-2">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                  {otpDelivery.delivery_type === 'email' ? <Mail size={16} /> : <MessageCircle size={16} />}
                 </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-900">OTP Verification</div>
-                  <div className="text-[11px] text-slate-500">
-                    Enter the 6-digit code sent to{' '}
-                    <strong className="text-slate-800 font-mono">{otpDelivery.target || identifier}</strong>
+                <div className="space-y-0.5">
+                  <div className="text-xs font-bold text-slate-900">
+                    {otpDelivery.delivery_type === 'email' ? 'OTP Sent to Email ID' : 'OTP Sent to WhatsApp / Mobile'}
+                  </div>
+                  <div className="text-[11px] text-slate-600 font-mono font-medium">
+                    {otpDelivery.target || identifier}
                   </div>
                 </div>
               </div>
+              <p className="text-[11px] text-slate-500 pl-10">
+                {otpDelivery.delivery_type === 'email'
+                  ? 'Please check your Email Inbox (or Spam folder) for the 6-digit verification code.'
+                  : 'Please check your WhatsApp or SMS inbox for the 6-digit verification code.'}
+              </p>
             </div>
 
-            {/* OTP Hint / Toast Notification */}
-            {otpDelivery.otp_hint && (
-              <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-left flex items-center justify-between gap-2 text-xs text-blue-900">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={15} className="text-blue-600 flex-shrink-0" />
-                  <span>
-                    Verification Code: <strong className="font-mono tracking-widest text-sm bg-white px-2 py-0.5 rounded border border-blue-200">{otpDelivery.otp_hint}</strong>
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const digits = otpDelivery.otp_hint.split('');
-                    setOtpDigits(digits);
-                  }}
-                  className="text-[11px] text-blue-700 font-bold hover:underline cursor-pointer"
-                >
-                  Auto-Fill
-                </button>
-              </div>
+            {/* Optional WhatsApp Direct Open Button */}
+            {otpDelivery.delivery_type === 'mobile' && otpDelivery.whatsapp_url && (
+              <a
+                href={otpDelivery.whatsapp_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition shadow-2xs cursor-pointer"
+              >
+                <MessageCircle size={15} />
+                <span>Open / Receive Code on WhatsApp</span>
+              </a>
             )}
 
             {/* 6 Digit Input Boxes */}
             <div className="space-y-2">
               <label className="block text-xs font-medium text-slate-700 text-left">
-                Enter 6-Digit OTP *
+                Enter 6-Digit OTP Code *
               </label>
               <div className="flex items-center justify-between gap-1.5 sm:gap-2" onPaste={handleOtpPaste}>
                 {otpDigits.map((digit, idx) => (
@@ -621,7 +620,7 @@ export default function AuthScreen({ onAuthSuccess }) {
                 className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800 font-medium cursor-pointer mt-1"
               >
                 <ArrowLeft size={12} />
-                <span>Change Mobile Number or Email</span>
+                <span>← Change Mobile Number or Email</span>
               </button>
             </div>
           </div>
