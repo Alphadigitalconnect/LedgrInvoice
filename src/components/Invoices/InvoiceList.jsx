@@ -24,7 +24,8 @@ export default function InvoiceList({
   onShareInvoice,
   onRecordPayment,
   onDeleteInvoice,
-  onDuplicateInvoice
+  onDuplicateInvoice,
+  onOpenMonthlyReport
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -76,13 +77,25 @@ export default function InvoiceList({
           </p>
         </div>
 
-        <button
-          onClick={onOpenNewInvoice}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 text-white transition self-start sm:self-auto cursor-pointer shadow-2xs"
-        >
-          <Plus size={14} />
-          <span>New Invoice</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {onOpenMonthlyReport && (
+            <button
+              onClick={onOpenMonthlyReport}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer shadow-2xs"
+              title="Export Monthly Invoices & GST Report"
+            >
+              <span>Export Monthly Report</span>
+            </button>
+          )}
+
+          <button
+            onClick={onOpenNewInvoice}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition cursor-pointer shadow-2xs"
+          >
+            <Plus size={14} />
+            <span>New Invoice</span>
+          </button>
+        </div>
       </div>
 
       {/* Quick Summary Chips */}

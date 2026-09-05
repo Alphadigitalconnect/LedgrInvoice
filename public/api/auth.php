@@ -42,16 +42,36 @@ function saveUsers($usersFile, $users) {
 
 function matchesUser($user, $identifier) {
     $idLow = strtolower(trim($identifier));
+    if (empty($idLow)) return false;
+
     $userEmailLow = strtolower(trim($user['email'] ?? ''));
     $userMobile = preg_replace('/[^0-9]/', '', $user['mobile'] ?? '');
     $userRawMobile = strtolower(trim($user['mobile'] ?? ''));
     $cleanPhone = preg_replace('/[^0-9]/', '', $identifier);
     $storedIdentifier = strtolower(trim($user['identifier'] ?? ''));
+    $storedName = strtolower(trim($user['name'] ?? ''));
 
+    // Exact matches
     if (!empty($userEmailLow) && $userEmailLow === $idLow) return true;
     if (!empty($storedIdentifier) && $storedIdentifier === $idLow) return true;
-    if (!empty($cleanPhone) && !empty($userMobile) && ($userMobile === $cleanPhone || (strlen($cleanPhone) >= 7 && str_ends_with($userMobile, $cleanPhone)) || (strlen($userMobile) >= 7 && str_ends_with($cleanPhone, $userMobile)))) return true;
     if (!empty($userRawMobile) && $userRawMobile === $idLow) return true;
+
+    // Phone matches
+    if (!empty($cleanPhone) && strlen($cleanPhone) >= 6 && !empty($userMobile)) {
+        if ($userMobile === $cleanPhone || str_ends_with($userMobile, $cleanPhone) || str_ends_with($cleanPhone, $userMobile)) {
+            return true;
+        }
+    }
+
+    // Prefix/Domain-agnostic match (e.g. admin@scandassociates matching admin@scandassociates.com)
+    if (strpos($idLow, '@') !== false && !empty($userEmailLow)) {
+        $partA = explode('@', $idLow)[0];
+        $partB = explode('@', $userEmailLow)[0];
+        if ($partA === $partB && (str_starts_with($userEmailLow, $idLow) || str_starts_with($idLow, $userEmailLow))) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -61,21 +81,19 @@ if (!is_array($input)) {
     $input = [];
 }
 
-// 1. REGISTER OR SET PASSWORD
-if ($action === 'register' || $action === 'set-password') {
+// 1. SIGN UP / REGISTER
+if ($action === 'register' || $action === 'signup' || $action === 'set-password') {
     $identifier = trim($input['identifier'] ?? '');
     $password = trim($input['password'] ?? '');
     $name = trim($input['name'] ?? 'Account Owner');
 
     if (empty($identifier)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Please provide a Mobile Number or Email ID.']);
+        echo json_encode(['success' => false, 'message' => 'Please enter your Mobile Number or Email ID.']);
         exit();
     }
 
     if (empty($password) || strlen($password) < 4) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Password must be at least 4 characters.']);
+        echo json_encode(['success' => false, 'message' => 'Password must be at least 4 characters long.']);
         exit();
     }
 
@@ -99,7 +117,7 @@ if ($action === 'register' || $action === 'set-password') {
 
             echo json_encode([
                 'success' => true,
-                'message' => 'Password and credentials updated successfully.',
+                'message' => 'Account password updated and logged in successfully.',
                 'user' => [
                     'id' => $existing['id'],
                     'name' => $existing['name'],
@@ -134,7 +152,7 @@ if ($action === 'register' || $action === 'set-password') {
 
     echo json_encode([
         'success' => true,
-        'message' => 'Account registered successfully.',
+        'message' => 'Account created successfully.',
         'user' => [
             'id' => $userId,
             'name' => $name,
@@ -153,7 +171,6 @@ if ($action === 'login') {
     $password = trim($input['password'] ?? '');
 
     if (empty($identifier) || empty($password)) {
-        http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Please enter your Mobile / Email and password.']);
         exit();
     }
@@ -169,14 +186,15 @@ if ($action === 'login') {
     }
 
     if (!$matchedUser) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'message' => 'Account not found. Please click "Set Password / Sign Up" to register.']);
+        echo json_encode([
+            'success' => false, 
+            'message' => 'Account not found for "' . htmlspecialchars($identifier) . '". Please click the "Sign Up" tab above to create an account.'
+        ]);
         exit();
     }
 
     if (!password_verify($password, $matchedUser['password_hash'])) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'message' => 'Incorrect password. Please verify or reset your password.']);
+        echo json_encode(['success' => false, 'message' => 'Incorrect password. Please verify your password or use Forgot Password.']);
         exit();
     }
 
@@ -206,8 +224,7 @@ if ($action === 'reset-password') {
     $newPassword = trim($input['new_password'] ?? '');
 
     if (empty($identifier) || empty($newPassword) || strlen($newPassword) < 4) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Please provide a valid identifier and min 4-character password.']);
+        echo json_encode(['success' => false, 'message' => 'Please provide a valid Mobile / Email and min 4-character password.']);
         exit();
     }
 
@@ -240,7 +257,6 @@ if ($action === 'reset-password') {
     }
 
     if (!$found) {
-        http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'No account registered with that email or mobile number.']);
         exit();
     }
@@ -255,7 +271,6 @@ if ($action === 'update-profile') {
     $newPassword = trim($input['new_password'] ?? '');
 
     if (empty($userId)) {
-        http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'User ID is required.']);
         exit();
     }
@@ -292,7 +307,6 @@ if ($action === 'update-profile') {
     }
 
     if (!$found) {
-        http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'User not found.']);
         exit();
     }
@@ -304,7 +318,6 @@ if ($action === 'delete-account') {
     $password = trim($input['password'] ?? '');
 
     if (empty($userId)) {
-        http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'User ID is required.']);
         exit();
     }
@@ -316,9 +329,7 @@ if ($action === 'delete-account') {
     foreach ($users as $u) {
         if ($u['id'] === $userId) {
             $found = true;
-            // Optionally check password if provided
             if (!empty($password) && !password_verify($password, $u['password_hash'])) {
-                http_response_code(401);
                 echo json_encode(['success' => false, 'message' => 'Incorrect password. Cannot delete account.']);
                 exit();
             }
@@ -341,11 +352,9 @@ if ($action === 'delete-account') {
         ]);
         exit();
     } else {
-        http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'User account not found.']);
         exit();
     }
 }
 
-http_response_code(400);
 echo json_encode(['success' => false, 'message' => 'Invalid action specified.']);

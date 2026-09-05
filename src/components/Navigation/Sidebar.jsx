@@ -31,7 +31,8 @@ export default function Sidebar({
   onOpenAddEntity,
   onLogout,
   authUser,
-  onOpenProfile
+  onOpenProfile,
+  onOpenMonthlyReport
 }) {
   const currentEntity = entities.find(e => e.id === activeEntityFilter);
 
@@ -219,6 +220,18 @@ export default function Sidebar({
 
       {/* Bottom Utility Tools */}
       <div className="p-3 border-t border-slate-200 space-y-1 bg-slate-50/50">
+        {onOpenMonthlyReport && (
+          <button
+            onClick={() => {
+              onOpenMonthlyReport();
+              if (onClose) onClose();
+            }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 bg-white transition cursor-pointer border border-emerald-200 shadow-2xs"
+          >
+            <Download size={13} className="text-emerald-600" />
+            <span>Monthly Invoices Report</span>
+          </button>
+        )}
         <button
           onClick={() => {
             onExportData();
@@ -227,7 +240,7 @@ export default function Sidebar({
           className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white transition cursor-pointer"
         >
           <Download size={13} className="text-slate-500" />
-          <span>Export Backup</span>
+          <span>Export JSON Backup</span>
         </button>
         <button
           onClick={() => {

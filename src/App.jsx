@@ -17,6 +17,9 @@ import LedgrLogo from './components/common/LedgrLogo';
 import AuthScreen from './components/Auth/AuthScreen';
 import ProfileModal from './components/Auth/ProfileModal';
 
+// Reports
+import MonthlyReportModal from './components/Reports/MonthlyReportModal';
+
 // Navigation & Layout
 import Sidebar from './components/Navigation/Sidebar';
 
@@ -110,6 +113,7 @@ export default function App() {
   const [clientModalData, setClientModalData] = useState(null); // null or { client: clientObj }
   const [isAddEntityModalOpen, setIsAddEntityModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isMonthlyReportOpen, setIsMonthlyReportOpen] = useState(false);
 
   // Invoice creation initial props
   const [invoiceContext, setInvoiceContext] = useState({
@@ -292,6 +296,7 @@ export default function App() {
         onLogout={handleLogout}
         authUser={authUser}
         onOpenProfile={() => setIsProfileModalOpen(true)}
+        onOpenMonthlyReport={() => setIsMonthlyReportOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -328,6 +333,7 @@ export default function App() {
             onRecordPayment={(inv) => setPaymentModalInvoice(inv)}
             onDeleteInvoice={handleDeleteInvoice}
             onDuplicateInvoice={handleDuplicateInvoice}
+            onOpenMonthlyReport={() => setIsMonthlyReportOpen(true)}
           />
         )}
 
@@ -441,6 +447,15 @@ export default function App() {
         authUser={authUser}
         onProfileUpdated={handleProfileUpdated}
         onAccountDeleted={handleAccountDeleted}
+      />
+
+      {/* Global Monthly Invoices & GST Report Modal */}
+      <MonthlyReportModal
+        isOpen={isMonthlyReportOpen}
+        onClose={() => setIsMonthlyReportOpen(false)}
+        invoices={invoices}
+        entities={entities}
+        clients={clients}
       />
 
       {/* Global Invoice Preview Modal */}
