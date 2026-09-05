@@ -142,11 +142,27 @@ export default function App() {
           name: inv.clientName,
           gstin: inv.clientGstin || '',
           stateName: inv.clientState || '',
+          address: inv.clientAddress || '',
+          city: inv.clientCity || '',
+          pinCode: inv.clientPinCode || '',
+          isGstRegistered: !!inv.clientGstin,
           createdAt: new Date().toISOString()
         };
         StorageService.saveClient(newCli);
         targetClient = newCli;
+      } else if (inv.clientAddress || inv.clientCity || inv.clientPinCode) {
+        // Update address if previously blank
+        const updatedCli = {
+          ...targetClient,
+          address: targetClient.address || inv.clientAddress || '',
+          city: targetClient.city || inv.clientCity || '',
+          pinCode: targetClient.pinCode || inv.clientPinCode || '',
+          gstin: targetClient.gstin || inv.clientGstin || ''
+        };
+        StorageService.saveClient(updatedCli);
+        targetClient = updatedCli;
       }
+
       const completeInvoice = {
         ...inv,
         clientId: targetClient.id || inv.clientId
@@ -508,6 +524,11 @@ export default function App() {
         onClose={() => setIsImportClientsOpen(false)}
         onImportSuccess={handleImportClientsSuccess}
         existingClients={clients}
+        entities={entities}
+        onNavigateToEntities={() => {
+          setIsImportClientsOpen(false);
+          setActiveTab('entities');
+        }}
       />
 
       {/* Global Import Invoices Modal */}
@@ -518,6 +539,10 @@ export default function App() {
         entities={entities}
         clients={clients}
         activeEntityId={activeEntityFilter}
+        onNavigateToEntities={() => {
+          setIsImportInvoicesOpen(false);
+          setActiveTab('entities');
+        }}
       />
 
       {/* Global Invoice Preview Modal */}
