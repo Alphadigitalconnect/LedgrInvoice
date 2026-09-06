@@ -39,12 +39,14 @@ export default function CreateInvoice({
   entities,
   clients,
   engagements,
+  categories: propCategories = [],
   initialEntityId,
   initialClientId,
   initialEngagementId,
   editingInvoice,
   onSaveInvoice,
   onSaveClient, // Inline adding customer
+  onOpenManageCategories,
   onCancel,
   onOpenPreview
 }) {
@@ -116,10 +118,17 @@ export default function CreateInvoice({
   const [placeOfSupplyStateCode, setPlaceOfSupplyStateCode] = useState(
     editingInvoice?.placeOfSupplyStateCode || initialClient?.stateCode || currentEntity?.stateCode || '36'
   );
-  const [isReverseCharge, setIsReverseCharge] = useState(
-    editingInvoice?.isReverseCharge || false
+  const [categories, setCategories] = useState(() => 
+    propCategories && propCategories.length > 0 ? propCategories : StorageService.getCategories()
   );
-  const [categories, setCategories] = useState(() => StorageService.getCategories());
+
+  useEffect(() => {
+    if (propCategories && propCategories.length > 0) {
+      setCategories(propCategories);
+    } else {
+      setCategories(StorageService.getCategories());
+    }
+  }, [propCategories]);
 
   const [items, setItems] = useState(
     editingInvoice?.items || [
@@ -801,27 +810,50 @@ export default function CreateInvoice({
                       <button
                         type="button"
                         onClick={() => {
-                          const newCat = prompt("Enter new Service Category name (e.g. Graphic Design, Financial Audit):");
-                          if (newCat && newCat.trim()) {
-                            const updated = StorageService.saveCategory(newCat.trim());
-                            setCategories(updated);
-                            handleUpdateItem(item.id, 'category', newCat.trim());
+                          if (onOpenManageCategories) {
+                            onOpenManageCategories();
+                          } else {
+                            const newCat = prompt("Enter new Service Category name (e.g. Graphic Design, Financial Audit):");
+                            if (newCat && newCat.trim()) {
+                              const updated = StorageService.saveCategory(newCat.trim());
+                              setCategories(updated);
+                              handleUpdateItem(item.id, 'category', newCat.trim());
+                            }
                           }
                         }}
-                        className="text-[10px] text-emerald-700 hover:text-emerald-800 font-semibold cursor-pointer"
-                        title="Create new Service Category"
+                        className="text-[10px] text-emerald-700 hover:text-emerald-800 font-semibold cursor-pointer flex items-center gap-0.5"
+                        title="Add or Edit Service Categories"
                       >
-                        + New
+                        <Plus size={10} />
+                        <span>Add / Edit</span>
                       </button>
                     </div>
                     <select
                       value={item.category || categories[0] || 'Consulting & Advisory'}
-                      onChange={(e) => handleUpdateItem(item.id, 'category', e.target.value)}
+                      onChange={(e) => {
+                        if (e.target.value === '__add_new__') {
+                          if (onOpenManageCategories) {
+                            onOpenManageCategories();
+                          } else {
+                            const newCat = prompt("Enter new Service Category name:");
+                            if (newCat && newCat.trim()) {
+                              const updated = StorageService.saveCategory(newCat.trim());
+                              setCategories(updated);
+                              handleUpdateItem(item.id, 'category', newCat.trim());
+                            }
+                          }
+                          return;
+                        }
+                        handleUpdateItem(item.id, 'category', e.target.value);
+                      }}
                       className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-slate-400 focus:outline-none"
                     >
                       {categories.map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
+                      <option value="__add_new__" className="font-semibold text-emerald-700 bg-emerald-50">
+                        + Add / Edit Categories...
+                      </option>
                     </select>
                   </div>
 

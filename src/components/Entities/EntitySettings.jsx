@@ -20,7 +20,9 @@ import {
   X,
   Phone,
   MapPin,
-  QrCode
+  QrCode,
+  FolderTree,
+  Tag
 } from 'lucide-react';
 import { GST_STATES, validateGSTIN, getStateFromGSTIN } from '../../data/constants';
 import { 
@@ -30,7 +32,13 @@ import {
   DEFAULT_EMAIL_BODY_TEMPLATE 
 } from '../../utils/templateHelper';
 
-export default function EntitySettings({ entities, onSaveEntity, onOpenAddEntity }) {
+export default function EntitySettings({ 
+  entities, 
+  categories = [], 
+  onSaveEntity, 
+  onOpenAddEntity, 
+  onOpenManageCategories 
+}) {
   const [selectedEntityId, setSelectedEntityId] = useState(entities[0]?.id || 'entity-1');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -773,8 +781,46 @@ export default function EntitySettings({ entities, onSaveEntity, onOpenAddEntity
         </div>
       </form>
     )}
+
+      {/* Business Service Categories Section */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-5 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <FolderTree size={14} className="text-slate-700" />
+              <span>Business Service Categories ({categories.length})</span>
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Categorize service offerings to track revenue streams in the dashboard without statutory clutter
+            </p>
+          </div>
+
+          {onOpenManageCategories && (
+            <button
+              type="button"
+              onClick={onOpenManageCategories}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition cursor-pointer shadow-2xs self-start sm:self-auto"
+            >
+              <Plus size={13} />
+              <span>Manage / Edit Categories</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {categories.map(cat => (
+            <span 
+              key={cat}
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-800 border border-slate-200 rounded-lg text-xs font-medium"
+            >
+              <Tag size={11} className="text-slate-400" />
+              <span>{cat}</span>
+            </span>
+          ))}
+        </div>
+      </div>
     </>
-    )}
-  </div>
+  )}
+</div>
 );
 }

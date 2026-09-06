@@ -15,7 +15,8 @@ import {
   Plus,
   Receipt,
   Layers,
-  DollarSign
+  DollarSign,
+  FolderTree
 } from 'lucide-react';
 import { formatINR } from '../../data/constants';
 import { formatDateDMY } from '../Invoices/InvoicePreview';
@@ -25,11 +26,13 @@ export default function Dashboard({
   clients,
   engagements,
   entities,
+  categories = [],
   activeEntityFilter,
   setActiveEntityFilter,
   onNavigate,
   onOpenNewInvoice,
   onOpenAddEntity,
+  onOpenManageCategories,
   onViewInvoice,
   onShareInvoice,
   onRecordPayment
@@ -331,21 +334,49 @@ export default function Dashboard({
       </div>
 
       {/* Revenue by Service Category Breakdown */}
-      {categoryStats.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 sm:p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <TrendingUp size={14} className="text-emerald-600" />
-                <span>Revenue by Service Category</span>
-              </h2>
-              <p className="text-[11px] text-slate-500 mt-0.5">Track revenue generation streams across your service offerings</p>
-            </div>
-            <span className="text-xs font-mono font-semibold text-slate-800">
-              {categoryStats.length} Categories Active
-            </span>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 sm:p-5 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <TrendingUp size={14} className="text-emerald-600" />
+              <span>Revenue by Service Category</span>
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-0.5">Track revenue generation streams across your service offerings</p>
           </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+              {categoryStats.length} Active Streams
+            </span>
+            {onOpenManageCategories && (
+              <button
+                type="button"
+                onClick={onOpenManageCategories}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition cursor-pointer shadow-2xs"
+              >
+                <FolderTree size={13} />
+                <span>Manage Categories</span>
+              </button>
+            )}
+          </div>
+        </div>
 
+        {categoryStats.length === 0 ? (
+          <div className="p-6 text-center bg-slate-50 rounded-lg border border-dashed border-slate-200 space-y-2">
+            <FolderTree size={20} className="mx-auto text-slate-400" />
+            <p className="text-xs font-semibold text-slate-700">No categorized service revenue recorded yet</p>
+            <p className="text-[11px] text-slate-500 max-w-sm mx-auto">Create and assign categories to invoice line items to track revenue breakdowns by domain.</p>
+            {onOpenManageCategories && (
+              <button
+                type="button"
+                onClick={onOpenManageCategories}
+                className="inline-flex items-center gap-1 px-3 py-1.5 mt-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold transition cursor-pointer shadow-2xs"
+              >
+                <Plus size={12} />
+                <span>Add / Edit Categories</span>
+              </button>
+            )}
+          </div>
+        ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
             {categoryStats.map(stat => {
               const sharePct = totalRaisedAmount > 0 ? Math.round((stat.totalAmount / totalRaisedAmount) * 100) : 0;
@@ -372,8 +403,8 @@ export default function Dashboard({
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Recent Invoices Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">

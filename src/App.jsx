@@ -21,6 +21,7 @@ import ProfileModal from './components/Auth/ProfileModal';
 import MonthlyReportModal from './components/Reports/MonthlyReportModal';
 import ImportClientsModal from './components/Clients/ImportClientsModal';
 import ImportInvoicesModal from './components/Invoices/ImportInvoicesModal';
+import CategoryManagerModal from './components/Categories/CategoryManagerModal';
 
 // Navigation & Layout
 import Sidebar from './components/Navigation/Sidebar';
@@ -55,6 +56,7 @@ export default function App() {
   const [clients, setClients] = useState(() => StorageService.getClients());
   const [engagements, setEngagements] = useState(() => StorageService.getEngagements());
   const [invoices, setInvoices] = useState(() => StorageService.getInvoices());
+  const [categories, setCategories] = useState(() => StorageService.getCategories());
 
   const handleLoginSuccess = async (user) => {
     setAuthUser(user);
@@ -66,6 +68,7 @@ export default function App() {
     setClients(StorageService.getClients());
     setEngagements(StorageService.getEngagements());
     setInvoices(StorageService.getInvoices());
+    setCategories(StorageService.getCategories());
 
     // Pull user's Hostinger cloud data if present
     if (user && user.id) {
@@ -75,6 +78,7 @@ export default function App() {
         setClients(StorageService.getClients());
         setEngagements(StorageService.getEngagements());
         setInvoices(StorageService.getInvoices());
+        setCategories(StorageService.getCategories());
       }
     }
   };
@@ -88,6 +92,7 @@ export default function App() {
     setClients([]);
     setEngagements([]);
     setInvoices([]);
+    setCategories([]);
   };
 
   const handleProfileUpdated = (updatedUser) => {
@@ -128,6 +133,24 @@ export default function App() {
   const [isMonthlyReportOpen, setIsMonthlyReportOpen] = useState(false);
   const [isImportClientsOpen, setIsImportClientsOpen] = useState(false);
   const [isImportInvoicesOpen, setIsImportInvoicesOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
+  // Category Handlers
+  const handleAddCategory = (newCat) => {
+    const updated = StorageService.saveCategory(newCat);
+    setCategories(updated);
+  };
+
+  const handleUpdateCategory = (oldCat, newCat) => {
+    const updated = StorageService.updateCategory(oldCat, newCat);
+    setCategories(updated);
+    setInvoices(StorageService.getInvoices());
+  };
+
+  const handleDeleteCategory = (catName) => {
+    const updated = StorageService.deleteCategory(catName);
+    setCategories(updated);
+  };
 
   // Bulk Import Handlers
   const handleImportClientsSuccess = (importedList) => {
@@ -376,11 +399,13 @@ export default function App() {
             clients={clients}
             engagements={engagements}
             entities={entities}
+            categories={categories}
             activeEntityFilter={activeEntityFilter}
             setActiveEntityFilter={setActiveEntityFilter}
             onNavigate={(tab) => setActiveTab(tab)}
             onOpenNewInvoice={() => handleOpenCreateInvoice()}
             onOpenAddEntity={() => setIsAddEntityModalOpen(true)}
+            onOpenManageCategories={() => setIsCategoryModalOpen(true)}
             onViewInvoice={(inv) => setPreviewInvoice(inv)}
             onShareInvoice={(inv) => setShareInvoiceData(inv)}
             onRecordPayment={(inv) => setPaymentModalInvoice(inv)}
@@ -412,12 +437,14 @@ export default function App() {
             entities={entities}
             clients={clients}
             engagements={engagements}
+            categories={categories}
             initialEntityId={invoiceContext.entityId}
             initialClientId={invoiceContext.clientId}
             initialEngagementId={invoiceContext.engagementId}
             editingInvoice={invoiceContext.editingInvoice}
             onSaveInvoice={handleSaveInvoice}
             onSaveClient={handleSaveClient}
+            onOpenManageCategories={() => setIsCategoryModalOpen(true)}
             onCancel={() => setActiveTab('invoices')}
             onOpenPreview={(inv) => setPreviewInvoice(inv)}
           />
@@ -452,8 +479,10 @@ export default function App() {
         {activeTab === 'entities' && (
           <EntitySettings
             entities={entities}
+            categories={categories}
             onSaveEntity={handleSaveEntity}
             onOpenAddEntity={() => setIsAddEntityModalOpen(true)}
+            onOpenManageCategories={() => setIsCategoryModalOpen(true)}
           />
         )}
       </main>
@@ -611,6 +640,17 @@ export default function App() {
           onClose={() => setClientModalData(null)}
         />
       )}
+
+      {/* Global Category Manager Modal */}
+      <CategoryManagerModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        categories={categories}
+        invoices={invoices}
+        onAddCategory={handleAddCategory}
+        onUpdateCategory={handleUpdateCategory}
+        onDeleteCategory={handleDeleteCategory}
+      />
     </div>
   );
 }

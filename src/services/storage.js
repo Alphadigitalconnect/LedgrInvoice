@@ -121,8 +121,50 @@ export const StorageService = {
     }
     return list;
   },
+  updateCategory(oldCatName, newCatName) {
+    const trimmedOld = String(oldCatName || '').trim();
+    const trimmedNew = String(newCatName || '').trim();
+    if (!trimmedOld || !trimmedNew || trimmedOld === trimmedNew) return this.getCategories();
+    
+    const list = this.getCategories();
+    const updated = list.map(c => (c.toLowerCase() === trimmedOld.toLowerCase() ? trimmedNew : c));
+    safeSet(getUserKey('categories'), updated);
+
+    // Also update any invoices with line items or top-level category matching oldCatName
+    const invoices = this.getInvoices();
+    let invoicesModified = false;
+    const updatedInvoices = invoices.map(inv => {
+      let itemsModified = false;
+      const newItems = (inv.items || []).map(it => {
+        if (it.category && it.category.toLowerCase() === trimmedOld.toLowerCase()) {
+          itemsModified = true;
+          return { ...it, category: trimmedNew };
+        }
+        return it;
+      });
+
+      const isTopCategoryMatch = inv.category && inv.category.toLowerCase() === trimmedOld.toLowerCase();
+      if (itemsModified || isTopCategoryMatch) {
+        invoicesModified = true;
+        return {
+          ...inv,
+          category: isTopCategoryMatch ? trimmedNew : inv.category,
+          items: newItems
+        };
+      }
+      return inv;
+    });
+
+    if (invoicesModified) {
+      safeSet(getUserKey('invoices'), updatedInvoices);
+    }
+
+    triggerCloudSync(this);
+    return updated;
+  },
   deleteCategory(catName) {
-    const list = this.getCategories().filter(c => c !== catName);
+    const trimmed = String(catName || '').trim();
+    const list = this.getCategories().filter(c => c.toLowerCase() !== trimmed.toLowerCase());
     safeSet(getUserKey('categories'), list);
     triggerCloudSync(this);
     return list;
