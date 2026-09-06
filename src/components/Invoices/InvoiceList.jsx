@@ -207,7 +207,15 @@ export default function InvoiceList({
                   };
 
                   return (
-                    <tr key={inv.id} className="hover:bg-slate-50/70 transition">
+                    <tr 
+                      key={inv.id} 
+                      className="hover:bg-slate-50/70 transition cursor-pointer"
+                      onClick={(e) => {
+                        // Don't trigger row click if action buttons are clicked
+                        if (e.target.closest('button')) return;
+                        onViewInvoice(inv);
+                      }}
+                    >
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="font-mono font-semibold text-slate-900">{inv.invoiceNumber}</div>
                         <div className="text-[11px] text-slate-600 font-medium whitespace-nowrap mt-0.5">

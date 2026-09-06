@@ -12,7 +12,7 @@ export default function AddEntityModal({ isOpen, onClose, onSaveEntity }) {
     id: `entity-${Date.now()}`,
     name: '',
     tradeName: '',
-    tagline: 'Strategic Management & Advisory',
+    tagline: '',
     logoUrl: '',
     gstin: '',
     pan: '',

@@ -138,7 +138,7 @@ export default function CreateInvoice({
       {
         id: `item-${Date.now()}`,
         type: 'SERVICE',
-        category: 'Consulting & Advisory',
+        category: propCategories?.[0] || StorageService.getCategories()?.[0] || '',
         sacHsn: '998311',
         description: '',
         qty: 1,
@@ -251,7 +251,7 @@ export default function CreateInvoice({
       {
         id: `item-${Date.now()}`,
         type: 'SERVICE',
-        category: categories[0] || 'Consulting & Advisory',
+        category: categories[0] || '',
         sacHsn: '998311',
         description: '',
         qty: 1,
@@ -335,7 +335,7 @@ export default function CreateInvoice({
 
       return {
         ...item,
-        category: item.category || categories[0] || 'Consulting & Advisory',
+        category: item.category || categories[0] || '',
         qty,
         rate,
         discountPercent: discountPct,
@@ -397,7 +397,7 @@ export default function CreateInvoice({
       isInterState,
       isReverseCharge,
       engagementId: selectedEngagementId || null,
-      category: calculatedItems[0]?.category || categories[0] || 'Consulting & Advisory',
+      category: calculatedItems[0]?.category || categories[0] || '',
       items: calculatedItems,
       taxableTotal,
       totalCgst,
@@ -832,7 +832,7 @@ export default function CreateInvoice({
                       </button>
                     </div>
                     <select
-                      value={item.category || categories[0] || 'Consulting & Advisory'}
+                      value={item.category || categories[0] || ''}
                       onChange={(e) => {
                         if (e.target.value === '__add_new__') {
                           if (onOpenManageCategories) {

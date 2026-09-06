@@ -221,7 +221,8 @@ export default function App() {
       entityId: ctx.entityId || (activeEntityFilter !== 'all' ? activeEntityFilter : entities[0]?.id),
       clientId: ctx.clientId || null,
       engagementId: ctx.engagementId || null,
-      editingInvoice: ctx.editingInvoice || null
+      editingInvoice: ctx.editingInvoice || null,
+      formKey: Date.now() // always unique so CreateInvoice remounts fresh
     });
     setActiveTab('create-invoice');
   };
@@ -433,7 +434,7 @@ export default function App() {
 
         {activeTab === 'create-invoice' && (
           <CreateInvoice
-            key={invoiceContext.editingInvoice?.id || `invoice-form-${invoiceContext.entityId || 'def'}-${invoiceContext.clientId || 'none'}`}
+            key={invoiceContext.formKey || invoiceContext.editingInvoice?.id || 'new-invoice'}
             entities={entities}
             clients={clients}
             engagements={engagements}
