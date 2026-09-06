@@ -118,6 +118,9 @@ export default function CreateInvoice({
   const [placeOfSupplyStateCode, setPlaceOfSupplyStateCode] = useState(
     editingInvoice?.placeOfSupplyStateCode || initialClient?.stateCode || currentEntity?.stateCode || '36'
   );
+  const [isReverseCharge, setIsReverseCharge] = useState(
+    editingInvoice?.isReverseCharge || false
+  );
   const [categories, setCategories] = useState(() => 
     propCategories && propCategories.length > 0 ? propCategories : StorageService.getCategories()
   );
