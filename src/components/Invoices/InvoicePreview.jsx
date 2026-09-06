@@ -246,7 +246,69 @@ export default function InvoicePreview({
   };
 
   const handlePrint = () => {
-    window.print();
+    if (!invoiceSheetRef.current) {
+      window.print();
+      return;
+    }
+    
+    // Create dedicated invisible print iframe
+    let printFrame = document.getElementById('invoice-print-frame');
+    if (!printFrame) {
+      printFrame = document.createElement('iframe');
+      printFrame.id = 'invoice-print-frame';
+      printFrame.style.position = 'fixed';
+      printFrame.style.top = '-9999px';
+      printFrame.style.left = '-9999px';
+      printFrame.style.width = '0px';
+      printFrame.style.height = '0px';
+      printFrame.style.border = 'none';
+      document.body.appendChild(printFrame);
+    }
+
+    const htmlContent = invoiceSheetRef.current.outerHTML;
+    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+      .map(s => s.outerHTML)
+      .join('\n');
+
+    const frameDoc = printFrame.contentWindow.document;
+    frameDoc.open();
+    frameDoc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${(invoice.invoiceNumber || 'INV').replace(/[\/\\?%*:|"<>]/g, '_')}_Tax_Invoice</title>
+          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
+          ${styles}
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 6mm !important;
+            }
+            html, body {
+              background: #ffffff !important;
+              color: #000000 !important;
+              font-family: 'Inter', -apple-system, sans-serif !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 100% !important;
+            }
+            .invoice-printable-sheet {
+              box-shadow: none !important;
+              border: none !important;
+              padding: 4mm !important;
+              margin: 0 auto !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              background-color: #ffffff !important;
+            }
+          </style>
+        </head>
+        <body onload="setTimeout(() => { window.focus(); window.print(); }, 250);">
+          ${htmlContent}
+        </body>
+      </html>
+    `);
+    frameDoc.close();
   };
 
   return (

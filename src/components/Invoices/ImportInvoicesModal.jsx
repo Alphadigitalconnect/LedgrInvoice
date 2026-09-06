@@ -291,6 +291,7 @@ export default function ImportInvoicesModal({
 
           // 5. Line Item details
           const description = String(row['Description of Services *'] || row['Description of Services'] || row['Description'] || row['Service'] || row['Item Name'] || 'Professional Services').trim();
+          const category = String(row['Category'] || row['Service Category'] || 'Consulting & Advisory').trim();
           const sacCode = String(row['HSN / SAC Code'] || row['SAC Code'] || row['HSN Code'] || row['SAC'] || '998311').trim();
           const quantity = Number(row['Quantity'] || row['Qty'] || 1) || 1;
           const taxableAmount = Number(row['Taxable Amount (₹) *'] || row['Taxable Amount'] || row['Rate'] || row['Unit Price'] || row['Amount'] || 0);
@@ -300,10 +301,22 @@ export default function ImportInvoicesModal({
             return;
           }
 
-          const rawGstRate = row['GST Rate % *'] || row['GST Rate %'] || row['GST Rate'] || row['Tax Rate'] || 18;
-          const gstRate = Number(String(rawGstRate).replace('%', '').trim()) || 18;
+          let rawGstRate = undefined;
+          const possibleGstKeys = ['GST Rate % *', 'GST Rate %', 'GST Rate', 'Tax Rate', 'GST %', 'GST%'];
+          for (const k of possibleGstKeys) {
+            if (row[k] !== undefined && String(row[k]).trim() !== '') {
+              rawGstRate = row[k];
+              break;
+            }
+          }
 
-          // 6. Automatic GST Calculation: Intra-state vs Inter-state
+          let gstRate = 0;
+          if (rawGstRate !== undefined) {
+            const parsed = Number(String(rawGstRate).replace('%', '').trim());
+            gstRate = isNaN(parsed) ? 0 : parsed;
+          }
+
+          // 6. Automatic GST Calculation: Intra-state vs Inter-state (Strict 0% GST check)
           const isInterState = clientState && matchedEntity.stateName && 
             clientState.toLowerCase() !== matchedEntity.stateName.toLowerCase();
 
@@ -312,13 +325,15 @@ export default function ImportInvoicesModal({
           let igstAmount = 0;
           let totalTax = 0;
 
-          if (isInterState) {
-            igstAmount = Math.round((taxableAmount * gstRate) / 100 * 100) / 100;
-            totalTax = igstAmount;
-          } else {
-            cgstAmount = Math.round((taxableAmount * (gstRate / 2)) / 100 * 100) / 100;
-            sgstAmount = Math.round((taxableAmount * (gstRate / 2)) / 100 * 100) / 100;
-            totalTax = cgstAmount + sgstAmount;
+          if (gstRate > 0 && matchedEntity.gstin) {
+            if (isInterState) {
+              igstAmount = Math.round((taxableAmount * gstRate) / 100 * 100) / 100;
+              totalTax = igstAmount;
+            } else {
+              cgstAmount = Math.round((taxableAmount * (gstRate / 2)) / 100 * 100) / 100;
+              sgstAmount = Math.round((taxableAmount * (gstRate / 2)) / 100 * 100) / 100;
+              totalTax = cgstAmount + sgstAmount;
+            }
           }
 
           const grandTotal = Math.round((taxableAmount + totalTax) * 100) / 100;
@@ -346,19 +361,36 @@ export default function ImportInvoicesModal({
             clientAddress: address,
             clientCity: city,
             clientPinCode: pinCode,
+            category: category,
             items: [
               {
                 id: `item-${Date.now()}-${idx}`,
                 description: description,
+                category: category,
+                sacHsn: sacCode,
                 sacCode: sacCode,
+                qty: quantity,
                 quantity: quantity,
                 rate: taxableAmount / quantity,
+                discountPercent: 0,
+                taxableAmount: taxableAmount,
                 amount: taxableAmount,
-                taxRate: gstRate
+                gstRate: gstRate,
+                taxRate: gstRate,
+                cgstAmount: cgstAmount,
+                sgstAmount: sgstAmount,
+                igstAmount: igstAmount,
+                totalTax: totalTax,
+                lineTotal: grandTotal
               }
             ],
+            taxableTotal: taxableAmount,
             taxableAmount: taxableAmount,
             subtotal: taxableAmount,
+            totalCgst: cgstAmount,
+            totalSgst: sgstAmount,
+            totalIgst: igstAmount,
+            totalTaxAmount: totalTax,
             cgstAmount: cgstAmount,
             sgstAmount: sgstAmount,
             igstAmount: igstAmount,

@@ -32,6 +32,7 @@ import {
   numberToWordsIndian,
   getStateFromGSTIN 
 } from '../../data/constants';
+import { StorageService } from '../../services/storage';
 import ClientModal from '../Clients/ClientModal';
 
 export default function CreateInvoice({
@@ -118,19 +119,21 @@ export default function CreateInvoice({
   const [isReverseCharge, setIsReverseCharge] = useState(
     editingInvoice?.isReverseCharge || false
   );
+  const [categories, setCategories] = useState(() => StorageService.getCategories());
 
   const [items, setItems] = useState(
     editingInvoice?.items || [
       {
         id: `item-${Date.now()}`,
         type: 'SERVICE',
-        sacHsn: '',
+        category: 'Consulting & Advisory',
+        sacHsn: '998311',
         description: '',
         qty: 1,
         unit: 'Unit',
         rate: 0,
         discountPercent: 0,
-        gstRate: 18
+        gstRate: currentEntity?.gstin ? 18 : 0
       }
     ]
   );
@@ -236,13 +239,14 @@ export default function CreateInvoice({
       {
         id: `item-${Date.now()}`,
         type: 'SERVICE',
+        category: categories[0] || 'Consulting & Advisory',
         sacHsn: '998311',
         description: '',
         qty: 1,
         unit: 'Project',
         rate: 10000,
         discountPercent: 0,
-        gstRate: 18
+        gstRate: currentEntity?.gstin ? 18 : 0
       }
     ]);
   };
@@ -260,7 +264,7 @@ export default function CreateInvoice({
           const matched = COMMON_SAC_HSN_CODES.find(c => c.code === value);
           if (matched && !item.description) {
             updated.description = matched.desc || matched.description || '';
-            updated.gstRate = matched.defaultGst !== undefined ? matched.defaultGst : (matched.gstRate || 18);
+            updated.gstRate = currentEntity?.gstin ? (matched.defaultGst !== undefined ? matched.defaultGst : (matched.gstRate || 18)) : 0;
             updated.type = matched.type || 'SERVICE';
           }
         }
@@ -301,15 +305,16 @@ export default function CreateInvoice({
       let igstRate = 0;
       let igstAmount = 0;
 
-      if (!isReverseCharge) {
+      // Only compute GST if rate > 0 and entity has GSTIN and not reverse charge
+      if (gstRate > 0 && !isReverseCharge && currentEntity?.gstin) {
         if (isInterState) {
           igstRate = gstRate;
-          igstAmount = taxableAmount * (igstRate / 100);
+          igstAmount = Math.round(taxableAmount * (igstRate / 100) * 100) / 100;
         } else {
           cgstRate = gstRate / 2;
-          cgstAmount = taxableAmount * (cgstRate / 100);
+          cgstAmount = Math.round(taxableAmount * (cgstRate / 100) * 100) / 100;
           sgstRate = gstRate / 2;
-          sgstAmount = taxableAmount * (sgstRate / 100);
+          sgstAmount = Math.round(taxableAmount * (sgstRate / 100) * 100) / 100;
         }
       }
 
@@ -318,6 +323,7 @@ export default function CreateInvoice({
 
       return {
         ...item,
+        category: item.category || categories[0] || 'Consulting & Advisory',
         qty,
         rate,
         discountPercent: discountPct,
@@ -335,7 +341,7 @@ export default function CreateInvoice({
         lineTotal
       };
     });
-  }, [items, isInterState, isReverseCharge]);
+  }, [items, isInterState, isReverseCharge, currentEntity, categories]);
 
   const taxableTotal = calculatedItems.reduce((sum, item) => sum + item.taxableAmount, 0);
   const totalCgst = calculatedItems.reduce((sum, item) => sum + item.cgstAmount, 0);
@@ -379,6 +385,7 @@ export default function CreateInvoice({
       isInterState,
       isReverseCharge,
       engagementId: selectedEngagementId || null,
+      category: calculatedItems[0]?.category || categories[0] || 'Consulting & Advisory',
       items: calculatedItems,
       taxableTotal,
       totalCgst,
@@ -786,9 +793,39 @@ export default function CreateInvoice({
                   )}
                 </div>
 
-                {/* SAC Code & Description */}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div className="space-y-1">
+                {/* Category, SAC Code & Description */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                  <div className="sm:col-span-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-slate-700 block">Category</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCat = prompt("Enter new Service Category name (e.g. Graphic Design, Financial Audit):");
+                          if (newCat && newCat.trim()) {
+                            const updated = StorageService.saveCategory(newCat.trim());
+                            setCategories(updated);
+                            handleUpdateItem(item.id, 'category', newCat.trim());
+                          }
+                        }}
+                        className="text-[10px] text-emerald-700 hover:text-emerald-800 font-semibold cursor-pointer"
+                        title="Create new Service Category"
+                      >
+                        + New
+                      </button>
+                    </div>
+                    <select
+                      value={item.category || categories[0] || 'Consulting & Advisory'}
+                      onChange={(e) => handleUpdateItem(item.id, 'category', e.target.value)}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-slate-400 focus:outline-none"
+                    >
+                      {categories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-3 space-y-1">
                     <label className="text-[11px] font-medium text-slate-700 block">SAC / HSN Code</label>
                     <select
                       value={item.sacHsn}
@@ -797,13 +834,13 @@ export default function CreateInvoice({
                     >
                       {COMMON_SAC_HSN_CODES.map(sac => (
                         <option key={sac.code} value={sac.code}>
-                          {sac.code} - {(sac.desc || sac.description || '').slice(0, 35)}...
+                          {sac.code} - {(sac.desc || sac.description || '').slice(0, 30)}...
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  <div className="sm:col-span-3 space-y-1">
+                  <div className="sm:col-span-6 space-y-1">
                     <label className="text-[11px] font-medium text-slate-700 block">Service Description *</label>
                     <input
                       type="text"

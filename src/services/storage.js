@@ -1,4 +1,5 @@
 import { ApiService } from './api';
+import { DEFAULT_SERVICE_CATEGORIES } from '../data/constants';
 
 const KEY_AUTH_USER = 'invoicify_auth_user';
 
@@ -44,6 +45,7 @@ function triggerCloudSync(storageInstance) {
       clients: storageInstance.getClients(),
       engagements: storageInstance.getEngagements(),
       invoices: storageInstance.getInvoices(),
+      categories: storageInstance.getCategories(),
       activeEntityId: storageInstance.getActiveEntityFilter()
     };
     ApiService.syncToHostinger(payload, userId);
@@ -62,6 +64,7 @@ export const StorageService = {
         safeSet(getUserKey('clients', user.id), []);
         safeSet(getUserKey('engagements', user.id), []);
         safeSet(getUserKey('invoices', user.id), []);
+        safeSet(getUserKey('categories', user.id), DEFAULT_SERVICE_CATEGORIES);
         safeSet(getUserKey('active_entity', user.id), "all");
       }
     }
@@ -87,17 +90,42 @@ export const StorageService = {
       const clients = Array.isArray(cloudData.clients) ? cloudData.clients : [];
       const engagements = Array.isArray(cloudData.engagements) ? cloudData.engagements : [];
       const invoices = Array.isArray(cloudData.invoices) ? cloudData.invoices : [];
+      const categories = Array.isArray(cloudData.categories) ? cloudData.categories : DEFAULT_SERVICE_CATEGORIES;
       const activeEntityId = cloudData.activeEntityId || "all";
 
       safeSet(getUserKey('entities', userId), entities);
       safeSet(getUserKey('clients', userId), clients);
       safeSet(getUserKey('engagements', userId), engagements);
       safeSet(getUserKey('invoices', userId), invoices);
+      safeSet(getUserKey('categories', userId), categories);
       safeSet(getUserKey('active_entity', userId), activeEntityId);
 
-      return { entities, clients, engagements, invoices, activeEntityId };
+      return { entities, clients, engagements, invoices, categories, activeEntityId };
     }
     return null;
+  },
+
+  // Service Categories
+  getCategories() {
+    return safeGet(getUserKey('categories'), DEFAULT_SERVICE_CATEGORIES);
+  },
+  saveCategory(newCategory) {
+    const trimmed = String(newCategory || '').trim();
+    if (!trimmed) return this.getCategories();
+    const list = this.getCategories();
+    if (!list.includes(trimmed)) {
+      const updated = [...list, trimmed];
+      safeSet(getUserKey('categories'), updated);
+      triggerCloudSync(this);
+      return updated;
+    }
+    return list;
+  },
+  deleteCategory(catName) {
+    const list = this.getCategories().filter(c => c !== catName);
+    safeSet(getUserKey('categories'), list);
+    triggerCloudSync(this);
+    return list;
   },
 
   // Active Entity Filter State
@@ -214,7 +242,41 @@ export const StorageService = {
 
   // Invoices
   getInvoices() {
-    return safeGet(getUserKey('invoices'), []);
+    const list = safeGet(getUserKey('invoices'), []);
+    let needsFix = false;
+    const repaired = list.map(inv => {
+      const items = Array.isArray(inv.items) ? inv.items : [];
+      const hasZeroGst = items.length > 0 && items.every(it => parseFloat(it.gstRate ?? it.taxRate ?? 0) === 0);
+      const taxableTotal = inv.taxableTotal || items.reduce((s, it) => s + (parseFloat(it.taxableAmount) || (parseFloat(it.qty || 1) * parseFloat(it.rate || 0))), 0);
+      
+      if (hasZeroGst && taxableTotal > 0 && (inv.totalTaxAmount > 0 || inv.grandTotal > taxableTotal)) {
+        needsFix = true;
+        return {
+          ...inv,
+          taxableTotal,
+          totalCgst: 0,
+          totalSgst: 0,
+          totalIgst: 0,
+          totalTaxAmount: 0,
+          grandTotal: taxableTotal,
+          items: items.map(it => ({
+            ...it,
+            gstRate: 0,
+            taxRate: 0,
+            cgstAmount: 0,
+            sgstAmount: 0,
+            igstAmount: 0,
+            totalTax: 0,
+            lineTotal: parseFloat(it.taxableAmount) || (parseFloat(it.qty || 1) * parseFloat(it.rate || 0))
+          }))
+        };
+      }
+      return inv;
+    });
+    if (needsFix) {
+      safeSet(getUserKey('invoices'), repaired);
+    }
+    return repaired;
   },
   getInvoiceById(id) {
     return this.getInvoices().find(inv => inv.id === id) || null;

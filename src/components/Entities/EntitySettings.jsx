@@ -15,7 +15,12 @@ import {
   RotateCcw,
   Sparkles,
   Upload,
-  Image
+  Image,
+  Edit3,
+  X,
+  Phone,
+  MapPin,
+  QrCode
 } from 'lucide-react';
 import { GST_STATES, validateGSTIN, getStateFromGSTIN } from '../../data/constants';
 import { 
@@ -28,6 +33,7 @@ import {
 export default function EntitySettings({ entities, onSaveEntity, onOpenAddEntity }) {
   const [selectedEntityId, setSelectedEntityId] = useState(entities[0]?.id || 'entity-1');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const currentEntity = entities.find(e => e.id === selectedEntityId) || entities[0];
 
@@ -51,6 +57,7 @@ export default function EntitySettings({ entities, onSaveEntity, onOpenAddEntity
         emailBodyTemplate: target.emailBodyTemplate || DEFAULT_EMAIL_BODY_TEMPLATE
       });
     }
+    setIsEditing(false);
   };
 
   const handleLogoUpload = (e) => {
@@ -108,7 +115,22 @@ export default function EntitySettings({ entities, onSaveEntity, onOpenAddEntity
     e.preventDefault();
     onSaveEntity(formData);
     setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+    setIsEditing(false); // Closes edit form immediately on save
+    setTimeout(() => setSavedSuccess(false), 4000);
+  };
+
+  const handleStartEdit = () => {
+    const target = entities.find(e => e.id === selectedEntityId) || entities[0];
+    if (target) {
+      setFormData({
+        ...target,
+        logoUrl: target.logoUrl || '',
+        whatsappTemplate: target.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE,
+        emailSubjectTemplate: target.emailSubjectTemplate || DEFAULT_EMAIL_SUBJECT_TEMPLATE,
+        emailBodyTemplate: target.emailBodyTemplate || DEFAULT_EMAIL_BODY_TEMPLATE
+      });
+    }
+    setIsEditing(true);
   };
 
   return (
@@ -207,23 +229,175 @@ export default function EntitySettings({ entities, onSaveEntity, onOpenAddEntity
             })}
           </div>
 
-          {/* Entity Profile Form */}
-          <form onSubmit={handleSubmit} className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200 shadow-2xs space-y-5 text-xs">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">
-              Editing: {formData.name || 'Entity'}
-            </h2>
-            <p className="text-[11px] text-slate-500 mt-0.5">Update legal identity, tax registrations, logo branding, banking and invoicing series</p>
-          </div>
-          <button
-            type="submit"
-            className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-4 py-1.5 rounded-lg font-medium transition cursor-pointer shadow-2xs"
-          >
-            <Save size={14} />
-            <span>Save Profile</span>
-          </button>
-        </div>
+          {!isEditing ? (
+            /* Entity Summary / Closed View */
+            <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-5 sm:p-6 space-y-6 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-3.5">
+                  {currentEntity?.logoUrl ? (
+                    <img 
+                      src={currentEntity.logoUrl} 
+                      alt={currentEntity.name} 
+                      className="w-14 h-14 rounded-xl object-contain bg-white border border-slate-200 p-1 shadow-2xs"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-slate-100 text-slate-800 font-bold text-base flex items-center justify-center border border-slate-200">
+                      {currentEntity?.logoBadge || 'EN'}
+                    </div>
+                  )}
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">{currentEntity?.name}</h2>
+                    {currentEntity?.tradeName && (
+                      <p className="text-xs text-slate-600 font-medium">{currentEntity.tradeName}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                        currentEntity?.gstin 
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-slate-100 text-slate-700 border-slate-200'
+                      }`}>
+                        {currentEntity?.gstin ? `GSTIN: ${currentEntity.gstin}` : 'NON-GST / UNREGISTERED'}
+                      </span>
+                      <span className="text-[10px] font-medium text-slate-500">
+                        State {currentEntity?.stateCode} ({currentEntity?.stateName || 'Telangana'})
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-xs transition cursor-pointer shadow-2xs"
+                >
+                  <Edit3 size={14} />
+                  <span>Edit Profile</span>
+                </button>
+              </div>
+
+              {/* Entity Overview Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Legal & Tax */}
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck size={14} className="text-slate-600" />
+                    <span>Legal & Tax Details</span>
+                  </h3>
+                  <div className="space-y-1 text-slate-700">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">GSTIN</span>
+                      <span className="font-mono font-medium text-slate-900">{currentEntity?.gstin || 'None (Exempt)'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">PAN Number</span>
+                      <span className="font-mono font-medium text-slate-900">{currentEntity?.pan || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Registered Jurisdiction</span>
+                      <span className="font-medium text-slate-900">{currentEntity?.stateName || 'Telangana'} (Code {currentEntity?.stateCode || '36'})</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contact & Address */}
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 size={14} className="text-slate-600" />
+                    <span>Registered Address</span>
+                  </h3>
+                  <div className="space-y-1 text-slate-700">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Address</span>
+                      <span className="font-medium text-slate-900">{currentEntity?.addressLine1 || currentEntity?.address || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">City & PIN</span>
+                      <span className="font-medium text-slate-900">{currentEntity?.city ? `${currentEntity.city} - ` : ''}{currentEntity?.pincode || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Email & Phone</span>
+                      <span className="font-medium text-slate-900">{currentEntity?.email || currentEntity?.phone ? `${currentEntity.email || ''} ${currentEntity.phone ? '• ' + currentEntity.phone : ''}` : '-'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Banking & UPI */}
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <CreditCard size={14} className="text-slate-600" />
+                    <span>Banking & Payments</span>
+                  </h3>
+                  <div className="space-y-1 text-slate-700">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Bank Name</span>
+                      <span className="font-medium text-slate-900">{currentEntity?.bankName || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">A/C No & IFSC</span>
+                      <span className="font-mono font-medium text-slate-900">{currentEntity?.bankAccountNo || '-'} {currentEntity?.bankIfsc ? `(${currentEntity.bankIfsc})` : ''}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">UPI ID</span>
+                      <span className="font-mono font-medium text-slate-900">{currentEntity?.upiId || 'Not configured'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Invoicing Series & Signatory Info */}
+              <div className="p-4 bg-slate-50/60 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Invoice Series Prefix</span>
+                    <span className="font-mono font-bold text-slate-900">{currentEntity?.invoicePrefix || 'INV/2026/'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Next Invoice Sequence</span>
+                    <span className="font-mono font-bold text-slate-900">{currentEntity?.nextInvoiceNumber || 101}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Authorized Signatory</span>
+                    <span className="font-semibold text-slate-900">{currentEntity?.signatory?.name || 'Managing Partner'}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 font-semibold cursor-pointer self-start sm:self-auto"
+                >
+                  <Edit3 size={13} />
+                  <span>Modify Settings</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Entity Profile Form (Opened when Edit is clicked) */
+            <form onSubmit={handleSubmit} className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200 shadow-2xs space-y-5 text-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">
+                    Editing: {formData.name || 'Entity'}
+                  </h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Update legal identity, tax registrations, logo branding, banking and invoicing series</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg font-medium transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-4 py-1.5 rounded-lg font-medium transition cursor-pointer shadow-2xs"
+                  >
+                    <Save size={14} />
+                    <span>Save Profile</span>
+                  </button>
+                </div>
+              </div>
 
         {/* Logo Branding */}
         <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3">
@@ -598,8 +772,9 @@ export default function EntitySettings({ entities, onSaveEntity, onOpenAddEntity
           </button>
         </div>
       </form>
-      </>
-      )}
-    </div>
-  );
+    )}
+    </>
+    )}
+  </div>
+);
 }

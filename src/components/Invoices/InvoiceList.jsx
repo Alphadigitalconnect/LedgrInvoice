@@ -208,9 +208,14 @@ export default function InvoiceList({
 
                   return (
                     <tr key={inv.id} className="hover:bg-slate-50/70 transition">
-                      <td className="px-4 py-3">
-                        <div className="font-mono font-medium text-slate-900">{inv.invoiceNumber}</div>
-                        <div className="text-[10px] text-slate-400">{formatDateDMY(inv.invoiceDate)} (Due: {formatDateDMY(inv.dueDate)})</div>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="font-mono font-semibold text-slate-900">{inv.invoiceNumber}</div>
+                        <div className="text-[11px] text-slate-600 font-medium whitespace-nowrap mt-0.5">
+                          {formatDateDMY(inv.invoiceDate)}
+                        </div>
+                        <div className="text-[10px] text-slate-400 whitespace-nowrap">
+                          Due: {formatDateDMY(inv.dueDate)}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-slate-700 font-medium">{ent?.tradeName || ent?.name || 'Entity'}</span>

@@ -63,6 +63,30 @@ export default function Dashboard({
   const activeQuotesCount = engagements.length;
   const totalQuotedValue = engagements.reduce((sum, e) => sum + (e.quotedFee || 0), 0);
 
+  // Revenue by Category Analytics
+  const categoryStats = React.useMemo(() => {
+    const map = {};
+    filteredInvoices.forEach(inv => {
+      const items = Array.isArray(inv.items) ? inv.items : [];
+      if (items.length > 0) {
+        items.forEach(it => {
+          const cat = it.category || inv.category || 'Consulting & Advisory';
+          const amt = parseFloat(it.taxableAmount) || parseFloat(it.lineTotal) || (parseFloat(it.qty || 1) * parseFloat(it.rate || 0)) || 0;
+          if (!map[cat]) map[cat] = { category: cat, totalAmount: 0, count: 0 };
+          map[cat].totalAmount += amt;
+          map[cat].count += 1;
+        });
+      } else {
+        const cat = inv.category || 'Consulting & Advisory';
+        const amt = inv.taxableTotal || inv.grandTotal || 0;
+        if (!map[cat]) map[cat] = { category: cat, totalAmount: 0, count: 0 };
+        map[cat].totalAmount += amt;
+        map[cat].count += 1;
+      }
+    });
+    return Object.values(map).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [filteredInvoices]);
+
   const quickActions = [
     { title: 'Add Entity', desc: 'New billing company', icon: Building2, action: onOpenAddEntity },
     { title: 'Create Invoice', desc: 'Bill client or customer', icon: PlusCircle, action: onOpenNewInvoice },
@@ -305,6 +329,51 @@ export default function Dashboard({
           </div>
         )}
       </div>
+
+      {/* Revenue by Service Category Breakdown */}
+      {categoryStats.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <TrendingUp size={14} className="text-emerald-600" />
+                <span>Revenue by Service Category</span>
+              </h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">Track revenue generation streams across your service offerings</p>
+            </div>
+            <span className="text-xs font-mono font-semibold text-slate-800">
+              {categoryStats.length} Categories Active
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+            {categoryStats.map(stat => {
+              const sharePct = totalRaisedAmount > 0 ? Math.round((stat.totalAmount / totalRaisedAmount) * 100) : 0;
+              return (
+                <div 
+                  key={stat.category}
+                  className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 space-y-1.5"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-800 line-clamp-1">{stat.category}</span>
+                    <span className="font-mono font-bold text-slate-900">{formatINR(stat.totalAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span>{stat.count} {stat.count === 1 ? 'service entry' : 'service entries'}</span>
+                    <span className="font-medium text-emerald-700">{sharePct}% share</span>
+                  </div>
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-emerald-600 h-full rounded-full transition-all duration-500" 
+                      style={{ width: `${Math.max(sharePct, 5)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Recent Invoices Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">

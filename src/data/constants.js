@@ -101,9 +101,21 @@ export const PRICING_MODELS = [
   { id: "MONTHLY_RETAINER", label: "Monthly Retainer" },
   { id: "QUARTERLY_RETAINER", label: "Quarterly Retainer" },
   { id: "HOURLY", label: "Hourly Rate" },
-  { id: "DAILY", label: "Daily Rate" },
   { id: "MILESTONE", label: "Milestone-Based" },
   { id: "SUCCESS_FEE", label: "Success / Contingency Fee" }
+];
+
+// Default Service Categories for Revenue Tracking
+export const DEFAULT_SERVICE_CATEGORIES = [
+  "Consulting & Advisory",
+  "Software & IT Development",
+  "Accounting & Taxation",
+  "Legal Services",
+  "Marketing & Branding",
+  "Design & Creative",
+  "Maintenance & Support",
+  "Audit & Assurance",
+  "Other Services"
 ];
 
 // Convert Number to Indian Rupees in Words
