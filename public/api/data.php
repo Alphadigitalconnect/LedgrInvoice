@@ -13,9 +13,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-$storageDir = __DIR__ . '/storage_data';
+// IMPORTANT: Store data OUTSIDE public_html so deployments never erase user data
+// /home/u557010885/ledgr_data/ persists across all frontend deployments
+$storageDir = '/home/u557010885/ledgr_data';
 if (!is_dir($storageDir)) {
-    @mkdir($storageDir, 0777, true);
+    @mkdir($storageDir, 0750, true);
 }
 
 // Get user ID from header or query
